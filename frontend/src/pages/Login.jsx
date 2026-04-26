@@ -66,7 +66,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@email.com"
+              placeholder="you@gmail.com"
             />
             {errors.email && (
               <p className="text-red-400 text-xs mt-1">{errors.email}</p>
