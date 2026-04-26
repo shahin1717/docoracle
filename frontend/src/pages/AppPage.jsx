@@ -1,7 +1,7 @@
-export default function Register() {
+export default function AppPage() {
     return (
       <h1 style={{ color: "white" }}>
-        REGISTER PAGE
+        APP PAGE (PROTECTED)
       </h1>
     );
   }
