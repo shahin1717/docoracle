@@ -1,0 +1,26 @@
+# Web framework
+fastapi
+uvicorn
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Auth
+python-jose[cryptography]
+bcrypt
+python-multipart
+pydantic[email]
+pydantic-settings
+
+# AI core
+pymupdf
+python-docx
+python-pptx
+faiss-cpu
+networkx
+numpy
+requests
+
+# Testing
+pytest
