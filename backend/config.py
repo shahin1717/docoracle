@@ -12,7 +12,7 @@ Usage:
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env"   # docoracle/.env
+ENV_FILE = Path(__file__).resolve().parents[1] / ".env"   # docoracle/.env
 
 
 class Settings(BaseSettings):
