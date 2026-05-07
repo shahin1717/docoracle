@@ -39,13 +39,13 @@ def build_knowledge_graph(document_id: str, db: Session) -> None:
         # ── 1. load chunk texts ───────────────────────────────────────────────
         from ai.vectorstore.metadata_store import MetadataStore
         meta_store = MetadataStore(db_path=settings.docs_db_path)
-        chunks = meta_store.get_chunks_for_doc(document_id)
+        chunks = meta_store.get_chunks_for_doc(doc.file_path)
 
         if not chunks:
             log.warning("kg: no chunks found for doc %s", document_id)
             return
 
-        full_text = "\n".join(c.text for c in chunks)
+        full_text = "\n".join(c["text"] for c in chunks)
         log.info("kg: loaded %d chunks, %d chars", len(chunks), len(full_text))
 
         # ── 2. extract entities ───────────────────────────────────────────────
