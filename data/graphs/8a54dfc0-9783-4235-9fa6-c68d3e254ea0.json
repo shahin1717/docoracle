@@ -1,0 +1,359 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "Matrix Diagonalization\nFrench",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "matrix diagonalization\nfrench"
+    },
+    {
+      "label": "Azerbaijani University",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "azerbaijani university"
+    },
+    {
+      "label": "UFAZ",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "ufaz"
+    },
+    {
+      "label": "French",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "french"
+    },
+    {
+      "label": "Matrix Diagonalization",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "matrix diagonalization"
+    },
+    {
+      "label": "Introduction",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "introduction"
+    },
+    {
+      "label": "Diagonalization\nFrench",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "diagonalization\nfrench"
+    },
+    {
+      "label": "Diagonalization\nDefinition\nLet",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "diagonalization\ndefinition\nlet"
+    },
+    {
+      "label": "Example",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "example"
+    },
+    {
+      "label": "Show",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "show"
+    },
+    {
+      "label": "Deduce",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "deduce"
+    },
+    {
+      "label": "Diagonalization\nTechniques",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "diagonalization\ntechniques"
+    },
+    {
+      "label": "Using",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "using"
+    },
+    {
+      "label": "Proposition\nIf",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "proposition\nif"
+    },
+    {
+      "label": "Diagonalization",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "diagonalization"
+    },
+    {
+      "label": "Proposition",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "proposition"
+    },
+    {
+      "label": "Let",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "let"
+    },
+    {
+      "label": "Proposition\nLet",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "proposition\nlet"
+    },
+    {
+      "label": "Vector Space",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "vector space"
+    },
+    {
+      "label": "Then",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "then"
+    },
+    {
+      "label": "Consequence\nLet",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "consequence\nlet"
+    },
+    {
+      "label": "Definition\nLet",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "definition\nlet"
+    },
+    {
+      "label": "Find",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "find"
+    },
+    {
+      "label": "Diagonalize",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "diagonalize"
+    },
+    {
+      "label": "Ker",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "ker"
+    },
+    {
+      "label": "Exercise",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "exercise"
+    },
+    {
+      "label": "Theorem\nLet",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "theorem\nlet"
+    },
+    {
+      "label": "END\nReferences",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "end\nreferences"
+    },
+    {
+      "label": "Pierre Cuillot",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "pierre cuillot"
+    },
+    {
+      "label": "Cours Concis",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "cours concis"
+    },
+    {
+      "label": "IRMA",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "irma"
+    },
+    {
+      "label": "eigen-vectors",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-vectors"
+    },
+    {
+      "label": "eigen-vector",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-vector"
+    },
+    {
+      "label": "eigen-value",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-value"
+    },
+    {
+      "label": "eigen-space",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-space"
+    },
+    {
+      "label": "eigen-values",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-values"
+    },
+    {
+      "label": "eigen-spaces",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "eigen-spaces"
+    },
+    {
+      "label": "an eigen-value of f",
+      "type": "DEFINED_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "an eigen-value of f"
+    },
+    {
+      "label": "the associated eigen-space to",
+      "type": "DEFINED_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "the associated eigen-space to"
+    },
+    {
+      "label": "the\ncharacteristic polynomial o",
+      "type": "DEFINED_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "the\ncharacteristic polynomial o"
+    },
+    {
+      "label": "the multiplicity of the eigen-v",
+      "type": "DEFINED_TERM",
+      "frequency": 1,
+      "chunk_ids": [],
+      "id": "the multiplicity of the eigen-v"
+    }
+  ],
+  "edges": [
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u03bbn\n\uf8f6\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f8\nConsequence\nLet f \u2208L(E) where E is a Vector Space of finite dimension."
+      ],
+      "source": "let",
+      "target": "vector space"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Then\n\u03bb is an eigen-value of f \u21d4det(A \u2212\u03bbIn) = 0\nThe expression det(A \u2212\u03bbIn) is a polynomial of the variable \u03bb called the\ncharacteristic polynomial of A (or of f ) and denoted \u03c7A (or \u03c7f )."
+      ],
+      "source": "then",
+      "target": "eigen-value"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Then\n\u03bb is an eigen-value of f \u21d4det(A \u2212\u03bbIn) = 0\nThe expression det(A \u2212\u03bbIn) is a polynomial of the variable \u03bb called the\ncharacteristic polynomial of A (or of f ) and denoted \u03c7A (or \u03c7f )."
+      ],
+      "source": "then",
+      "target": "an eigen-value of f"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Then\n\u03bb is an eigen-value of f \u21d4det(A \u2212\u03bbIn) = 0\nThe expression det(A \u2212\u03bbIn) is a polynomial of the variable \u03bb called the\ncharacteristic polynomial of A (or of f ) and denoted \u03c7A (or \u03c7f )."
+      ],
+      "source": "then",
+      "target": "the\ncharacteristic polynomial o"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Then\nA is diagonalizable if and only if Pm\ni=1 ni = n\nIn which case, the set {eij}i=1...m,j=1...ni is a basis of Kn composed of\neigen-vectors of f ."
+      ],
+      "source": "then",
+      "target": "eigen-vectors"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Then\nA is diagonalizable if and only if Pm\ni=1 ni = n\nIn which case, the set {eij}i=1...m,j=1...ni is a basis of Kn composed of\neigen-vectors of f ."
+      ],
+      "source": "then",
+      "target": "eigen-vector"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u03bbn\n\uf8f6\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f7\n\uf8f8\nConsequence\nLet f \u2208L(E) where E is a Vector Space of finite dimension."
+      ],
+      "source": "consequence\nlet",
+      "target": "vector space"
+    }
+  ]
+}

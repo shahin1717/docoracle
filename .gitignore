@@ -1,0 +1,16 @@
+__pycache__
+ai/__pycache__
+ai/vectorstore/__pycache__
+ai/chunker/__pycache__
+ai/embedding/__pycache__
+ai/generation/__pycache__
+ai/ingestion/__pycache__
+ai/retrieval/__pycache__
+ai/tests/__pycache__
+backend/__pycache__
+backend/services/__pycache__
+backend/db/__pycache__
+backedn/api/__pycache__
+backedn/auth/__pycache__
+data/__pycache__
+knowledge_graphs/__pycache__
