@@ -1,0 +1,1171 @@
+--- ./api/graph.py ---
+# backend/api/graph.py
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.kg_service import get_graph_data
+
+router = APIRouter(prefix="/graph", tags=["graph"])
+log = logging.getLogger(__name__)
+
+
+# ── GET /graph/{doc_id} ───────────────────────────────────────────────────────
+@router.get("/{doc_id}")
+def get_graph(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Returns knowledge graph JSON for react-force-graph.
+
+    Response shape:
+        {
+            "nodes": [{"id": "...", "label": "...", "size": 1}, ...],
+            "links": [{"source": "...", "target": "...", "relation": "..."}, ...]
+        }
+    """
+    # ── ownership check ───────────────────────────────────────────────────────
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.user_id == current_user.id,
+    ).first()
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    # ── kg not built yet ──────────────────────────────────────────────────────
+    if not doc.kg_ready:
+        raise HTTPException(
+            status_code=status.HTTP_202_ACCEPTED,
+            detail="Knowledge graph is still being built. Try again shortly.",
+        )
+
+    # ── load + export ─────────────────────────────────────────────────────────
+    try:
+        graph_data = get_graph_data(doc_id)
+        log.info(
+            "graph: served %d nodes, %d links for doc %s",
+            len(graph_data.get("nodes", [])),
+            len(graph_data.get("links", [])),
+            doc_id,
+        )
+        return graph_data
+
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Graph file missing. Re-upload the document to rebuild.",
+        )
+    except Exception as exc:
+        log.exception("graph: failed to load graph for doc %s", doc_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load graph: {exc}",
+        )--- ./api/health.py ---
+# backend/api/health.py
+import logging
+
+import requests
+from fastapi import APIRouter
+
+from backend.config import settings
+
+router = APIRouter(prefix="/health", tags=["health"])
+log = logging.getLogger(__name__)
+
+
+@router.get("")
+def health_check() -> dict:
+    """
+    GET /health
+
+    Returns:
+        - api:    always "ok"
+        - ollama: "ok" | "unavailable"
+        - llm:    model name + loaded status
+        - embed:  embed model name + loaded status
+    """
+    ollama_ok   = False
+    llm_loaded  = False
+    embed_loaded = False
+
+    try:
+        # ── check Ollama is running ───────────────────────────────────────────
+        resp = requests.get(
+            f"{settings.ollama_base_url}/api/tags",
+            timeout=3,
+        )
+        if resp.status_code == 200:
+            ollama_ok = True
+            loaded_models = {m["name"] for m in resp.json().get("models", [])}
+            llm_loaded   = settings.llm_model   in loaded_models
+            embed_loaded = settings.embed_model in loaded_models
+
+    except Exception:
+        log.warning("health: Ollama unreachable at %s", settings.ollama_base_url)
+
+    return {
+        "api":    "ok",
+        "ollama": "ok" if ollama_ok else "unavailable",
+        "llm": {
+            "model":  settings.llm_model,
+            "loaded": llm_loaded,
+        },
+        "embed": {
+            "model":  settings.embed_model,
+            "loaded": embed_loaded,
+        },
+    }--- ./api/documents.py ---
+# backend/api/documents.py
+import logging
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.config import settings
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.ingest_service import run_ingestion
+from backend.services.kg_service import build_knowledge_graph
+
+router = APIRouter(prefix="/documents", tags=["documents"])
+log = logging.getLogger(__name__)
+
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".md"}
+MAX_FILE_SIZE      = 50 * 1024 * 1024   # 50 MB
+
+
+# ── response schema ───────────────────────────────────────────────────────────
+class DocumentOut(BaseModel):
+    id:          str
+    filename:    str
+    file_type:   str
+    file_size:   int
+    status:      str
+    error_msg:   str | None
+    chunk_count: int
+    page_count:  int
+    kg_ready:    bool
+
+    model_config = {"from_attributes": True}
+
+
+# ── POST /documents/upload ────────────────────────────────────────────────────
+@router.post("/upload", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    file: UploadFile,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # ── validate extension ────────────────────────────────────────────────────
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {ALLOWED_EXTENSIONS}",
+        )
+
+    # ── read + size check ─────────────────────────────────────────────────────
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File exceeds 50 MB limit.",
+        )
+
+    # ── save to disk ──────────────────────────────────────────────────────────
+    user_upload_dir = Path(settings.uploads_dir) / current_user.id
+    user_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = user_upload_dir / file.filename
+    # avoid collisions — append a counter if file already exists
+    counter = 1
+    while dest.exists():
+        dest = user_upload_dir / f"{Path(file.filename).stem}_{counter}{suffix}"
+        counter += 1
+
+    dest.write_bytes(content)
+    log.info("upload: saved %s (%d bytes) for user %s", dest.name, len(content), current_user.id)
+
+    # ── create DB row ─────────────────────────────────────────────────────────
+    doc = Document(
+        user_id   = current_user.id,
+        filename  = file.filename,
+        file_type = suffix.lstrip("."),
+        file_path = str(dest),
+        file_size = len(content),
+        status    = "pending",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+
+    # ── kick off background pipeline ──────────────────────────────────────────
+    background_tasks.add_task(run_ingestion, doc.id, db)
+    background_tasks.add_task(build_knowledge_graph, doc.id, db)
+
+    log.info("upload: document %s queued for ingestion", doc.id)
+    return DocumentOut.model_validate(doc)
+
+
+# ── GET /documents ────────────────────────────────────────────────────────────
+@router.get("", response_model=list[DocumentOut])
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    docs = (
+        db.query(Document)
+        .filter(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    return [DocumentOut.model_validate(d) for d in docs]
+
+
+# ── GET /documents/{doc_id} ───────────────────────────────────────────────────
+@router.get("/{doc_id}", response_model=DocumentOut)
+def get_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+    return DocumentOut.model_validate(doc)
+
+
+# ── DELETE /documents/{doc_id} ────────────────────────────────────────────────
+@router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+
+    # remove file from disk
+    file_path = Path(doc.file_path)
+    if file_path.exists():
+        file_path.unlink()
+        log.info("delete: removed file %s", file_path)
+
+    # remove FAISS index folder
+    faiss_path = Path(settings.faiss_dir) / doc_id
+    if faiss_path.exists():
+        shutil.rmtree(faiss_path)
+        log.info("delete: removed FAISS index %s", faiss_path)
+
+    # remove knowledge graph JSON
+    graph_path = Path(settings.graphs_dir) / f"{doc_id}.json"
+    if graph_path.exists():
+        graph_path.unlink()
+        log.info("delete: removed graph %s", graph_path)
+
+    db.delete(doc)
+    db.commit()
+
+
+# ── helper ────────────────────────────────────────────────────────────────────
+def _get_owned_doc(doc_id: str, user_id: str, db: Session) -> Document:
+    """Fetch a document and verify it belongs to the requesting user."""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    if doc.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    return doc--- ./api/chat.py ---
+# backend/api/chat.py
+import json
+import logging
+from typing import AsyncGenerator
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.query_service import get_source_chunks, stream_answer
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+log = logging.getLogger(__name__)
+
+
+# ── request schema ────────────────────────────────────────────────────────────
+class QueryRequest(BaseModel):
+    query:   str
+    doc_ids: list[str]   # which documents to query against
+
+
+# ── POST /chat/query ──────────────────────────────────────────────────────────
+@router.post("/query")
+async def chat_query(
+    body: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    SSE streaming endpoint.
+
+    Event types sent to frontend:
+        data: {"type": "token",  "content": "<token>"}
+        data: {"type": "sources","content": [ ...chunks... ]}
+        data: {"type": "done"}
+        data: {"type": "error",  "content": "<message>"}
+    """
+    if not body.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Query cannot be empty.",
+        )
+
+    if not body.doc_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Select at least one document.",
+        )
+
+    # ── verify all doc_ids belong to this user ────────────────────────────────
+    for doc_id in body.doc_ids:
+        doc = db.query(Document).filter(
+            Document.id == doc_id,
+            Document.user_id == current_user.id,
+        ).first()
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document {doc_id} not found.",
+            )
+        if doc.status != "ready":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Document '{doc.filename}' is still being processed.",
+            )
+
+    return StreamingResponse(
+        _event_stream(body.query, body.doc_ids, current_user.id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx buffering
+        },
+    )
+
+
+# ── SSE generator ─────────────────────────────────────────────────────────────
+async def _event_stream(
+    query: str,
+    doc_ids: list[str],
+    user_id: str,
+) -> AsyncGenerator[str, None]:
+    """Wraps the synchronous stream_answer generator into SSE events."""
+
+    collected_tokens = []
+    chunk_ids_used   = []
+
+    try:
+        for token in stream_answer(query, doc_ids, user_id):
+            # query_service prefixes chunk_ids with a special marker
+            if isinstance(token, dict) and token.get("chunk_ids"):
+                chunk_ids_used = token["chunk_ids"]
+                continue
+
+            collected_tokens.append(token)
+            yield _sse({"type": "token", "content": token})
+
+        # ── send source citations after streaming ─────────────────────────────
+        if chunk_ids_used:
+            sources = get_source_chunks(chunk_ids_used)
+            yield _sse({"type": "sources", "content": sources})
+
+        yield _sse({"type": "done"})
+
+    except Exception as exc:
+        log.exception("chat: stream error for user %s", user_id)
+        yield _sse({"type": "error", "content": str(exc)})
+
+
+def _sse(payload: dict) -> str:
+    """Format a dict as a Server-Sent Event string."""
+    return f"data: {json.dumps(payload)}\n\n"--- ./db/database.py ---
+# backend/db/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from backend.config import settings
+
+# ── Engine ────────────────────────────────────────────────────────────────────
+# check_same_thread=False is required for SQLite + FastAPI (multi-threaded)
+engine = create_engine(
+    settings.app_db_url,
+    connect_args={"check_same_thread": False},
+    echo=settings.debug,        # logs all SQL when DEBUG=true
+)
+
+# ── Session factory ───────────────────────────────────────────────────────────
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# ── Base class for all ORM models ─────────────────────────────────────────────
+Base = declarative_base()
+
+
+# ── Dependency — use this in every FastAPI route ──────────────────────────────
+def get_db():
+    """Yields a DB session and guarantees it closes after the request."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_db() -> None:
+    """Create all tables. Called once on app startup."""
+    # import models here so Base knows about them before create_all
+    from backend.db import models  # noqa: F401
+    Base.metadata.create_all(bind=engine)--- ./db/models.py ---
+# backend/db/models.py
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Column, String, Integer, DateTime, ForeignKey, Boolean, Text
+)
+from sqlalchemy.orm import relationship
+
+from backend.db.database import Base
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+# ── User ──────────────────────────────────────────────────────────────────────
+class User(Base):
+    __tablename__ = "users"
+
+    id           = Column(String, primary_key=True, default=_uuid)
+    username     = Column(String(64),  unique=True, nullable=False, index=True)
+    email        = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    is_active    = Column(Boolean, default=True, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # one user → many documents
+    documents = relationship("Document", back_populates="owner",
+                             cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} username={self.username}>"
+
+
+# ── Document ──────────────────────────────────────────────────────────────────
+class Document(Base):
+    __tablename__ = "documents"
+
+    id           = Column(String, primary_key=True, default=_uuid)
+    user_id      = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+
+    filename     = Column(String(255), nullable=False)   # original file name
+    file_type    = Column(String(16),  nullable=False)   # pdf / docx / pptx / md
+    file_path    = Column(String(512), nullable=False)   # absolute path on disk
+    file_size    = Column(Integer,     nullable=False)   # bytes
+
+    # ingestion state
+    status       = Column(String(32), default="pending", nullable=False)
+    # pending → processing → ready | failed
+    error_msg    = Column(Text, nullable=True)
+
+    # counts populated after ingestion
+    chunk_count  = Column(Integer, default=0, nullable=False)
+    page_count   = Column(Integer, default=0, nullable=False)
+
+    # knowledge graph built?
+    kg_ready     = Column(Boolean, default=False, nullable=False)
+
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at   = Column(DateTime, default=datetime.utcnow,
+                          onupdate=datetime.utcnow, nullable=False)
+
+    # relationship back to owner
+    owner = relationship("User", back_populates="documents")
+
+    def __repr__(self) -> str:
+        return f"<Document id={self.id} filename={self.filename} status={self.status}>"--- ./auth/models.py ---
+# backend/auth/models.py
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field
+
+
+# ── Register ──────────────────────────────────────────────────────────────────
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64)
+    email:    EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+# ── Login ─────────────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# ── Token ─────────────────────────────────────────────────────────────────────
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+
+
+# ── Current user (returned by middleware) ─────────────────────────────────────
+class UserOut(BaseModel):
+    id:         str
+    username:   str
+    email:      str
+    is_active:  bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}   # allows UserOut.model_validate(db_user)--- ./auth/jwt_handler.py ---
+# backend/auth/jwt_handler.py
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+
+from backend.config import settings
+
+
+# ── Create ─────────────────────────────────────────────────────────────────────
+def create_access_token(user_id: str, username: str) -> str:
+    """Sign and return a JWT containing user_id + username."""
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
+    payload = {
+        "sub": user_id,          # subject — our user UUID
+        "username": username,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+# ── Verify ─────────────────────────────────────────────────────────────────────
+def decode_access_token(token: str) -> dict:
+    """
+    Decode and validate a JWT.
+
+    Returns the payload dict on success.
+    Raises ValueError with a human-readable message on any failure
+    (expired, invalid signature, malformed).
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token is missing subject claim.")
+        return payload
+
+    except JWTError as exc:
+        raise ValueError(f"Invalid or expired token: {exc}") from exc--- ./auth/router.py ---
+# backend/auth/router.py
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.auth.jwt_handler import create_access_token
+from backend.auth.middleware import get_current_user
+from backend.auth.models import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from backend.db.database import get_db
+from backend.db.models import User
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+def _hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+# ── POST /auth/register ───────────────────────────────────────────────────────
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    # duplicate username
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken.",
+        )
+    # duplicate email
+    if db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered.",
+        )
+
+    user = User(
+        username=body.username,
+        email=body.email,
+        password_hash=_hash_password(body.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(user_id=user.id, username=user.username)
+    return TokenResponse(access_token=token)
+
+
+# ── POST /auth/login ──────────────────────────────────────────────────────────
+@router.post("/login", response_model=TokenResponse)
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == body.username).first()
+
+    if not user or not _verify_password(body.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+
+    token = create_access_token(user_id=user.id, username=user.username)
+    return TokenResponse(access_token=token)
+
+
+# ── GET /auth/me ──────────────────────────────────────────────────────────────
+@router.get("/me", response_model=UserOut)
+def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)--- ./auth/middleware.py ---
+# backend/auth/middleware.py
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
+
+from backend.auth.jwt_handler import decode_access_token
+from backend.db.database import get_db
+from backend.db.models import User
+
+# ── Bearer token extractor ────────────────────────────────────────────────────
+_bearer = HTTPBearer(auto_error=True)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    FastAPI dependency — extracts + validates JWT, returns the live DB user.
+
+    Usage in any protected route:
+        current_user: User = Depends(get_current_user)
+    """
+    token = credentials.credentials
+
+    # 1. decode & validate JWT
+    try:
+        payload = decode_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 2. pull user from DB (token could be valid but user deleted)
+    user_id: str = payload["sub"]
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+
+    return user--- ./services/ingest_service.py ---
+# backend/services/ingest_service.py
+import logging
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.config import settings
+from backend.db.models import Document
+
+log = logging.getLogger(__name__)
+
+
+def run_ingestion(document_id: str, db: Session) -> None:
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        log.error("ingest: document %s not found", document_id)
+        return
+
+    _set_status(doc, "processing", db)
+
+    try:
+        from ai.ingestion.router import parse_document
+        parsed = parse_document(doc.file_path)
+        log.info("ingest: parsed %s — %d pages", doc.filename, parsed.page_count)
+
+        from ai.chunker.chunker import Chunker
+        chunks = Chunker(
+            chunk_size=settings.chunk_size,
+            overlap=settings.chunk_overlap,
+        ).chunk_document(parsed)
+        log.info("ingest: %d chunks created", len(chunks))
+
+        from ai.embedding.embedder import Embedder
+        import numpy as np
+        embedder = Embedder(
+            model=settings.embed_model,
+            ollama_url=f"{settings.ollama_base_url}/api/embeddings",
+        )
+        embedded = embedder.embed_chunks(chunks)
+        log.info("ingest: %d chunks embedded", len(embedded))
+
+        from ai.vectorstore.faiss_store import FAISSStore
+        faiss_path = Path(settings.faiss_dir) / doc.id
+        store = FAISSStore()
+        vectors = np.stack([e.vector for e in embedded])
+        ids = [e.chunk_id for e in embedded]
+        store.add(ids, vectors)
+        store.save(faiss_path)
+        log.info("ingest: FAISS index saved → %s", faiss_path)
+
+        from ai.vectorstore.metadata_store import MetadataStore
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        meta_store.insert_chunks([{
+            "chunk_id":    e.chunk_id,
+            "source_path": e.chunk.source_path,
+            "title":       e.chunk.metadata["title"],
+            "file_type":   e.chunk.metadata["file_type"],
+            "page_num":    e.chunk.page_num,
+            "chunk_index": e.chunk.chunk_index,
+            "text":        e.chunk.text,
+            "token_count": e.chunk.token_count,
+            "metadata":    e.chunk.metadata,
+        } for e in embedded])
+        log.info("ingest: metadata saved to docs.db")
+
+        doc.chunk_count = len(chunks)
+        doc.page_count  = parsed.page_count
+        _set_status(doc, "ready", db)
+        log.info("ingest: document %s → ready", doc.id)
+
+    except Exception as exc:
+        log.exception("ingest: failed for document %s", document_id)
+        doc.error_msg = str(exc)
+        _set_status(doc, "failed", db)
+
+
+def _set_status(doc: Document, status: str, db: Session) -> None:
+    doc.status = status
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)--- ./services/query_service.py ---
+# backend/services/query_service.py
+import logging
+from pathlib import Path
+from typing import Generator
+
+from backend.config import settings
+
+log = logging.getLogger(__name__)
+
+
+def stream_answer(
+    query: str,
+    doc_ids: list[str],
+    user_id: str,
+) -> Generator[str, None, None]:
+    try:
+        from ai.embedding.embedder import Embedder
+        embedder = Embedder(
+            model=settings.embed_model,
+            ollama_url=f"{settings.ollama_base_url}/api/embeddings",
+        )
+
+        from ai.vectorstore.faiss_store import FAISSStore
+        from ai.vectorstore.metadata_store import MetadataStore
+        from ai.retrieval.dense_retriever import DenseRetriever
+        from ai.retrieval.bm25_retriever import BM25Retriever
+        from ai.retrieval.hybrid_retriever import HybridRetriever
+        from ai.retrieval.reranker import Reranker
+        from backend.db.database import SessionLocal
+        from backend.db.models import Document as DocumentModel
+
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        all_chunks = []
+        last_faiss_path = None
+
+        _db = SessionLocal()
+        for doc_id in doc_ids:
+            faiss_path = Path(settings.faiss_dir) / doc_id
+            if not faiss_path.exists():
+                log.warning("query: no FAISS index for doc %s — skipping", doc_id)
+                continue
+            db_doc = _db.query(DocumentModel).filter(DocumentModel.id == doc_id).first()
+            if not db_doc:
+                continue
+            chunks = meta_store.get_chunks_for_doc(db_doc.file_path)
+            all_chunks.extend(chunks)
+            last_faiss_path = faiss_path
+        _db.close()
+
+        if not all_chunks or last_faiss_path is None:
+            yield "No indexed documents found for your query."
+            return
+
+        store = FAISSStore()
+        store.load(last_faiss_path)
+        dense  = DenseRetriever(store=store, embedder=embedder)
+        bm25   = BM25Retriever()
+        bm25.index([{"chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks])
+        hybrid = HybridRetriever(dense=dense, bm25=bm25)
+        candidates = hybrid.retrieve(query, top_k=settings.retrieval_top_k)
+        log.info("query: %d candidates from hybrid retrieval", len(candidates))
+
+        chunk_dicts = [{"chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
+        reranker = Reranker(embedder=embedder)
+        top_chunks = reranker.rerank(
+            query=query,
+            candidates=candidates,
+            chunks=chunk_dicts,
+        )
+        log.info("query: %d chunks after reranking", len(top_chunks))
+
+        graph_context = ""
+        try:
+            from knowledge_graph.graph_store import GraphStore
+            from knowledge_graph.graph_retriever import GraphRetriever
+            graphs_dir = Path(settings.graphs_dir)
+            all_graph_facts = []
+            for doc_id in doc_ids:
+                graph_path = graphs_dir / f"{doc_id}.json"
+                if graph_path.exists():
+                    graph = GraphStore(str(graphs_dir)).load(doc_id)
+                    facts = GraphRetriever(graph).get_context_for_query(query)
+                    if facts:
+                        all_graph_facts.append(facts)
+            if all_graph_facts:
+                graph_context = "\n".join(all_graph_facts)
+                log.info("query: graph context added")
+        except Exception:
+            log.warning("query: graph context unavailable — continuing without it")
+
+        from ai.generation.prompt_builder import build_prompt
+        chunk_ids = [c[0] for c in top_chunks]
+        messages = build_prompt(query=query, chunk_ids=chunk_ids, metadata_store=meta_store)
+        if graph_context:
+            messages[1]["content"] = graph_context + "\n\n" + messages[1]["content"]
+
+        from ai.generation.llm_client import LLMClient
+        llm = LLMClient(
+            model=settings.llm_model,
+            ollama_url=f"{settings.ollama_base_url}/api/chat",
+        )
+        log.info("query: streaming from %s", settings.llm_model)
+        yield from llm.stream(messages)
+
+    except Exception as exc:
+        log.exception("query: pipeline error")
+        yield f"\n\n[Error: {exc}]"
+
+
+def get_source_chunks(chunk_ids: list[str]) -> list[dict]:
+    from ai.vectorstore.metadata_store import MetadataStore
+    meta_store = MetadataStore(db_path=settings.docs_db_path)
+    return [meta_store.get_chunk(cid) for cid in chunk_ids if cid]--- ./services/kg_service.py ---
+# backend/services/kg_service.py
+import logging
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.config import settings
+from backend.db.models import Document
+
+log = logging.getLogger(__name__)
+
+
+# ── build ─────────────────────────────────────────────────────────────────────
+def build_knowledge_graph(document_id: str, db: Session) -> None:
+    """
+    Build and persist a knowledge graph for one document.
+    Called as a BackgroundTask after ingestion completes.
+
+    Steps:
+        1. Load chunk texts from MetadataStore
+        2. Extract entities
+        3. Extract relations → triples
+        4. Build NetworkX DiGraph
+        5. Save graph JSON to data/graphs/<doc_id>.json
+        6. Mark document.kg_ready = True
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        log.error("kg: document %s not found", document_id)
+        return
+
+    if doc.status != "ready":
+        log.warning("kg: document %s not ready yet — skipping KG build", document_id)
+        return
+
+    log.info("kg: starting graph build for %s", doc.filename)
+
+    try:
+        # ── 1. load chunk texts ───────────────────────────────────────────────
+        from ai.vectorstore.metadata_store import MetadataStore
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        chunks = meta_store.get_chunks_for_doc(document_id)
+
+        if not chunks:
+            log.warning("kg: no chunks found for doc %s", document_id)
+            return
+
+        full_text = "\n".join(c.text for c in chunks)
+        log.info("kg: loaded %d chunks, %d chars", len(chunks), len(full_text))
+
+        # ── 2. extract entities ───────────────────────────────────────────────
+        from knowledge_graph.entity_extractor import EntityExtractor
+        entity_extractor = EntityExtractor()
+        entities = entity_extractor.extract(full_text)
+        log.info("kg: %d entities extracted", len(entities))
+
+        # ── 3. extract relations ──────────────────────────────────────────────
+        from knowledge_graph.relation_extractor import RelationExtractor
+        relation_extractor = RelationExtractor()
+        triples = relation_extractor.extract(full_text, entities)
+        log.info("kg: %d triples extracted", len(triples))
+
+        # ── 4. build graph ────────────────────────────────────────────────────
+        from knowledge_graph.graph_builder import GraphBuilder
+        builder = GraphBuilder()
+        graph = builder.build(entities=entities, triples=triples)
+        log.info(
+            "kg: graph built — %d nodes, %d edges",
+            graph.number_of_nodes(),
+            graph.number_of_edges(),
+        )
+
+        # ── 5. save graph ─────────────────────────────────────────────────────
+        from knowledge_graph.graph_store import GraphStore
+        graphs_dir = str(settings.graphs_dir)
+        g_store = GraphStore(graphs_dir)
+        g_store.save(graph, document_id)
+        log.info("kg: graph saved → %s/%s.json", graphs_dir, document_id)
+
+        # ── 6. mark kg_ready ──────────────────────────────────────────────────
+        doc.kg_ready = True
+        db.add(doc)
+        db.commit()
+        log.info("kg: document %s kg_ready = True", document_id)
+
+    except Exception as exc:
+        log.exception("kg: build failed for document %s", document_id)
+        # KG failure is non-fatal — document stays usable for RAG
+
+
+# ── serve ─────────────────────────────────────────────────────────────────────
+def get_graph_data(document_id: str) -> dict:
+    """
+    Load and return graph JSON for the frontend (react-force-graph format).
+    Raises FileNotFoundError if the graph hasn't been built yet.
+    """
+    from knowledge_graph.graph_store import GraphStore
+    from knowledge_graph.graph_exporter import GraphExporter
+
+    graphs_dir = str(settings.graphs_dir)
+    g_store = GraphStore(graphs_dir)
+
+    graph_path = Path(settings.graphs_dir) / f"{document_id}.json"
+    if not graph_path.exists():
+        raise FileNotFoundError(f"Graph not found for document {document_id}")
+
+    graph = g_store.load(document_id)
+    exporter = GraphExporter()
+    return exporter.to_frontend_json(graph)--- ./config.py ---
+# backend/config.py
+from pathlib import Path
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # ── App ───────────────────────────────────────────────────────────────────
+    app_name: str = "DocOracle"
+    debug: bool = False
+
+    # ── Paths ─────────────────────────────────────────────────────────────────
+    base_dir: Path = Path(__file__).resolve().parent.parent   # project root
+    data_dir: Path = base_dir / "data"
+    uploads_dir: Path = data_dir / "uploads"
+    faiss_dir: Path = data_dir / "faiss_index"
+    graphs_dir: Path = data_dir / "graphs"
+
+    # ── Databases ─────────────────────────────────────────────────────────────
+    app_db_url: str = ""          # filled in model_post_init
+    docs_db_path: str = ""        # filled in model_post_init
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    secret_key: str = "CHANGE_ME_IN_PRODUCTION_USE_32_CHAR_SECRET"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24   # 24 hours
+
+    # ── Ollama ────────────────────────────────────────────────────────────────
+    ollama_base_url: str = "http://localhost:11434"
+    llm_model: str = "mistral:7b-instruct-q4_0"
+    embed_model: str = "nomic-embed-text"
+
+    # ── RAG ───────────────────────────────────────────────────────────────────
+    chunk_size: int = 512
+    chunk_overlap: int = 64
+    retrieval_top_k: int = 10       # candidates before reranking
+    rerank_top_k: int = 5           # chunks sent to LLM
+
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    allowed_origins: list[str] = ["http://localhost:5173"]   # Vite dev server
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    def model_post_init(self, __context) -> None:
+        """Ensure all directories exist and set derived paths."""
+        for d in (self.data_dir, self.uploads_dir, self.faiss_dir, self.graphs_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+        if not self.app_db_url:
+            object.__setattr__(
+                self, "app_db_url", f"sqlite:///{self.data_dir / 'app.db'}"
+            )
+        if not self.docs_db_path:
+            object.__setattr__(
+                self, "docs_db_path", str(self.data_dir / "docs.db")
+            )
+
+
+# Single shared instance — import this everywhere
+settings = Settings()--- ./logging.py ---
+# backend/logging.py
+import logging
+import sys
+
+
+def setup_logging(debug: bool = False) -> None:
+    """
+    Configure structured logging for the entire app.
+    Call once at startup in main.py.
+
+    Format:
+        2024-01-15 10:23:45 | INFO     | backend.api.documents | upload: saved file.pdf
+    """
+    level = logging.DEBUG if debug else logging.INFO
+
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # avoid adding duplicate handlers on reload (uvicorn --reload)
+    if not root.handlers:
+        root.addHandler(handler)
+
+    # quiet down noisy libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("multipart").setLevel(logging.WARNING)--- ./main.py ---
+# backend/main.py
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.config import settings
+from backend.logging import setup_logging
+from backend.db.database import init_db
+
+# ── routers ───────────────────────────────────────────────────────────────────
+from backend.auth.router import router as auth_router
+from backend.api.documents import router as documents_router
+from backend.api.chat import router as chat_router
+from backend.api.graph import router as graph_router
+from backend.api.health import router as health_router
+
+
+# ── lifespan (startup / shutdown) ─────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    setup_logging(debug=settings.debug)
+    init_db()                          # creates tables if they don't exist
+    yield
+    # shutdown  (nothing to clean up yet)
+
+
+# ── app ───────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url="/docs",       # Swagger UI
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,   # ["http://localhost:5173"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── routes ────────────────────────────────────────────────────────────────────
+app.include_router(auth_router)
+app.include_router(documents_router)
+app.include_router(chat_router)
+app.include_router(graph_router)
+app.include_router(health_router)
+
+
+# ── root ──────────────────────────────────────────────────────────────────────
+@app.get("/", tags=["root"])
+def root():
+    return {"app": settings.app_name, "status": "running", "docs": "/docs"}

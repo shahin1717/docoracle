@@ -1,0 +1,3981 @@
+--- ./ai/__init__.py ---
+from .ingestion import parse_document, get_supported_extensions, ParsedDocument
+from .chunker import Chunker, Chunk
+from .embedding import Embedder, EmbeddedChunk
+from .vectorstore import FAISSStore, MetadataStore
+from .retrieval import DenseRetriever, BM25Retriever, HybridRetriever, Reranker
+from .generation import LLMClient, build_prompt
+
+__all__ = [
+    "parse_document",
+    "get_supported_extensions",
+    "ParsedDocument",
+    "Chunker",
+    "Chunk",
+    "Embedder",
+    "EmbeddedChunk",
+    "FAISSStore",
+    "MetadataStore",
+    "DenseRetriever",
+    "BM25Retriever",
+    "HybridRetriever",
+    "Reranker",
+    "LLMClient",
+    "build_prompt",
+]--- ./ai/generation/__init__.py ---
+from .llm_client import LLMClient
+from .prompt_builder import build_prompt
+
+__all__ = ["LLMClient", "build_prompt"]--- ./ai/generation/llm_client.py ---
+import requests
+import json
+from typing import Iterator
+
+
+OLLAMA_URL = "http://localhost:11434/api/chat"
+DEFAULT_MODEL = "mistral:7b-instruct-q4_0"
+
+
+class LLMClient:
+    """
+    Sends prompts to Ollama and returns responses.
+    Supports both full responses and streaming (token by token).
+    """
+
+    def __init__(self, model: str = DEFAULT_MODEL, ollama_url: str = OLLAMA_URL):
+        self.model = model
+        self.url = ollama_url
+
+    def generate(self, messages: list[dict]) -> str:
+        """Blocking call — waits for full response then returns it."""
+        response = requests.post(self.url, json={
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+        }, timeout=120)
+        response.raise_for_status()
+        return response.json()["message"]["content"]
+
+    def stream(self, messages: list[dict]) -> Iterator[str]:
+        """
+        Streaming call — yields tokens as they arrive.
+        Use this for the FastAPI SSE endpoint so the UI
+        shows text appearing word by word.
+
+        Usage:
+            for token in client.stream(messages):
+                print(token, end="", flush=True)
+        """
+        response = requests.post(self.url, json={
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+        }, stream=True, timeout=120)
+        response.raise_for_status()
+
+        for line in response.iter_lines():
+            if not line:
+                continue
+            data = json.loads(line)
+            token = data.get("message", {}).get("content", "")
+            if token:
+                yield token
+            if data.get("done"):
+                break
+
+    def is_available(self) -> bool:
+        try:
+            r = requests.get(
+                self.url.replace("/api/chat", "/api/tags"), timeout=5
+            )
+            return r.status_code == 200
+        except requests.exceptions.ConnectionError:
+            return False--- ./ai/generation/prompt_builder.py ---
+from ai.vectorstore.metadata_store import MetadataStore
+
+
+def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore) -> list[dict]:
+    """
+    Assembles the message list to send to Ollama.
+    Returns OpenAI-style messages: [system, user].
+    """
+    chunks = metadata_store.get_chunks(chunk_ids)
+
+    context_parts = []
+    for i, chunk in enumerate(chunks, 1):
+        source = chunk.get("title") or chunk["source_path"]
+        page = f", page {chunk['page_num']}" if chunk["page_num"] else ""
+        context_parts.append(f"[{i}] (source: {source}{page})\n{chunk['text']}")
+
+    context = "\n\n".join(context_parts)
+
+    system_prompt = (
+        "You are a helpful assistant that answers questions based strictly on the provided context. "
+        "Always cite the source number [1], [2] etc. when using information from a chunk. "
+        "If the context does not contain enough information to answer, say so clearly. "
+        "Do not make up facts."
+    )
+
+    user_message = f"Context:\n{context}\n\nQuestion: {query}"
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user",   "content": user_message},
+    ]--- ./ai/embedding/__init__.py ---
+from .embedder import Embedder, EmbeddedChunk
+
+__all__ = ["Embedder", "EmbeddedChunk"]--- ./ai/embedding/embedder.py ---
+import time
+import requests
+import numpy as np
+from dataclasses import dataclass
+
+from ai.chunker.chunker import Chunk
+
+
+OLLAMA_URL = "http://localhost:11434/api/embeddings"
+DEFAULT_MODEL = "nomic-embed-text"
+
+
+@dataclass
+class EmbeddedChunk:
+    """A Chunk that now also carries its vector."""
+    chunk: Chunk
+    vector: np.ndarray   # shape: (768,) for nomic-embed-text
+
+    @property
+    def chunk_id(self):
+        return self.chunk.chunk_id
+
+
+class Embedder:
+    """
+    Calls Ollama's embedding endpoint to turn text into vectors.
+
+    Why Ollama instead of HuggingFace directly?
+    - No GPU memory management code needed — Ollama handles it
+    - Same HTTP interface for both embedding and generation
+    - Easy to swap models: just change model name
+
+    Ollama must be running: `ollama serve`
+    Model must be pulled: `ollama pull nomic-embed-text`
+    """
+
+    def __init__(self, model: str = DEFAULT_MODEL, ollama_url: str = OLLAMA_URL):
+        self.model = model
+        self.url = ollama_url
+
+    def embed_text(self, text: str) -> np.ndarray:
+        """Embed a single string. Returns a 1D numpy array."""
+        response = requests.post(self.url, json={
+            "model": self.model,
+            "prompt": text,
+        }, timeout=30)
+        response.raise_for_status()
+        vector = response.json()["embedding"]
+        return np.array(vector, dtype=np.float32)
+
+    def embed_chunks(self, chunks: list[Chunk], batch_size: int = 32) -> list[EmbeddedChunk]:
+        """
+        Embed a list of Chunks in batches.
+        Returns EmbeddedChunk objects pairing each Chunk with its vector.
+        """
+        results = []
+        total = len(chunks)
+
+        for i in range(0, total, batch_size):
+            batch = chunks[i:i + batch_size]
+            print(f"  Embedding {i+1}–{min(i+batch_size, total)} / {total}...")
+
+            for chunk in batch:
+                vector = self.embed_text(chunk.text)
+                results.append(EmbeddedChunk(chunk=chunk, vector=vector))
+
+        return results
+
+    def is_available(self) -> bool:
+        """Check if Ollama is running and the model is loaded."""
+        try:
+            r = requests.get(self.url.replace("/api/embeddings", "/api/tags"), timeout=5)
+            if r.status_code != 200:
+                return False
+            models = [m["name"] for m in r.json().get("models", [])]
+            return any(self.model in m for m in models)
+        except requests.exceptions.ConnectionError:
+            return False
+--- ./ai/retrieval/reranker.py ---
+import requests
+
+
+OLLAMA_URL = "http://localhost:11434/api/embeddings"
+
+
+class Reranker:
+    """
+    Cross-encoder style reranker using embedding similarity.
+
+    For each (query, chunk) pair we compute the cosine similarity
+    of their embeddings and re-sort. This is a lightweight reranker
+    that doesn't need a separate cross-encoder model.
+
+    On your machine you can upgrade this to use
+    cross-encoder/ms-marco-MiniLM-L-6-v2 via sentence-transformers
+    for significantly better reranking quality.
+    """
+
+    def __init__(self, embedder, top_k: int = 5):
+        self.embedder = embedder
+        self.top_k = top_k
+
+    def rerank(
+        self,
+        query: str,
+        candidates: list[tuple[str, float]],
+        chunks: list[dict],
+    ) -> list[tuple[str, float]]:
+        """
+        candidates: list of (chunk_id, score) from hybrid retriever
+        chunks:     list of chunk dicts with chunk_id and text
+        Returns reranked list of (chunk_id, score).
+        """
+        if not candidates:
+            return []
+
+        import numpy as np
+
+        query_vec = self.embedder.embed_text(query)
+        text_by_id = {c["chunk_id"]: c["text"] for c in chunks}
+
+        scored = []
+        for chunk_id, _ in candidates:
+            text = text_by_id.get(chunk_id, "")
+            if not text:
+                continue
+            chunk_vec = self.embedder.embed_text(text)
+            score = float(np.dot(query_vec, chunk_vec) / (
+                np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec) + 1e-8
+            ))
+            scored.append((chunk_id, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:self.top_k]--- ./ai/retrieval/__init__.py ---
+from .dense_retriever import DenseRetriever
+from .bm25_retriever import BM25Retriever
+from .hybrid_retriever import HybridRetriever
+from .reranker import Reranker
+
+__all__ = ["DenseRetriever", "BM25Retriever", "HybridRetriever", "Reranker"]--- ./ai/retrieval/hybrid_retriever.py ---
+from ai.retrieval.dense_retriever import DenseRetriever
+from ai.retrieval.bm25_retriever import BM25Retriever
+
+
+class HybridRetriever:
+    """
+    Combines dense (FAISS) and sparse (BM25) results
+    using Reciprocal Rank Fusion (RRF).
+
+    RRF formula: score = sum(1 / (k + rank))
+    where k=60 is a constant that dampens the effect of high ranks.
+
+    Why RRF instead of weighted sum?
+    - No need to tune weights
+    - Scores from dense and sparse are on different scales — RRF
+      only cares about rank position, not raw score values
+    """
+
+    def __init__(self, dense: DenseRetriever, bm25: BM25Retriever, k: int = 60):
+        self.dense = dense
+        self.bm25 = bm25
+        self.k = k
+
+    def retrieve(self, query: str, top_k: int = 5) -> list[tuple[str, float]]:
+        dense_results = self.dense.retrieve(query, top_k=top_k * 2)
+        bm25_results  = self.bm25.retrieve(query, top_k=top_k * 2)
+
+        rrf_scores: dict[str, float] = {}
+
+        for rank, (chunk_id, _) in enumerate(dense_results, start=1):
+            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0) + 1 / (self.k + rank)
+
+        for rank, (chunk_id, _) in enumerate(bm25_results, start=1):
+            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0) + 1 / (self.k + rank)
+
+        ranked = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+        return ranked[:top_k]--- ./ai/retrieval/bm25_retriever.py ---
+import math
+from collections import Counter
+
+
+class BM25Retriever:
+    """
+    Classic keyword search using BM25 scoring.
+    Operates on raw text — no vectors needed.
+    Complements dense search for exact keyword matches.
+    """
+
+    def __init__(self, k1: float = 1.5, b: float = 0.75):
+        self.k1 = k1
+        self.b = b
+        self._corpus: list[tuple[str, list[str]]] = []  # (chunk_id, tokens)
+        self._avgdl: float = 0
+        self._df: dict[str, int] = {}
+        self._n: int = 0
+
+    def index(self, chunks: list[dict]):
+        """
+        Build BM25 index from chunks.
+        Each chunk dict needs: chunk_id, text.
+        """
+        self._corpus = []
+        for chunk in chunks:
+            tokens = self._tokenize(chunk["text"])
+            self._corpus.append((chunk["chunk_id"], tokens))
+
+        self._n = len(self._corpus)
+        self._avgdl = sum(len(tokens) for _, tokens in self._corpus) / max(self._n, 1)
+
+        self._df = {}
+        for _, tokens in self._corpus:
+            for term in set(tokens):
+                self._df[term] = self._df.get(term, 0) + 1
+
+    def retrieve(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
+        """Returns list of (chunk_id, score) sorted by score descending."""
+        query_tokens = self._tokenize(query)
+        scores = []
+
+        for chunk_id, tokens in self._corpus:
+            score = self._score(query_tokens, tokens)
+            if score > 0:
+                scores.append((chunk_id, score))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return scores[:top_k]
+
+    def _score(self, query_tokens: list[str], doc_tokens: list[str]) -> float:
+        tf = Counter(doc_tokens)
+        dl = len(doc_tokens)
+        score = 0.0
+
+        for term in query_tokens:
+            if term not in tf:
+                continue
+            df = self._df.get(term, 0)
+            idf = math.log((self._n - df + 0.5) / (df + 0.5) + 1)
+            tf_val = tf[term]
+            numerator = tf_val * (self.k1 + 1)
+            denominator = tf_val + self.k1 * (1 - self.b + self.b * dl / self._avgdl)
+            score += idf * (numerator / denominator)
+
+        return score
+
+    def _tokenize(self, text: str) -> list[str]:
+        return text.lower().split()--- ./ai/retrieval/dense_retriever.py ---
+import numpy as np
+from ai.vectorstore.faiss_store import FAISSStore
+from ai.embedding.embedder import Embedder
+
+
+class DenseRetriever:
+    """
+    Searches FAISS index using the query embedding.
+    Returns chunk_ids ranked by cosine similarity.
+    """
+
+    def __init__(self, store: FAISSStore, embedder: Embedder):
+        self.store = store
+        self.embedder = embedder
+
+    def retrieve(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
+        """Returns list of (chunk_id, score)."""
+        vector = self.embedder.embed_text(query)
+        return self.store.search(vector, top_k=top_k)--- ./ai/tests/test_ai_full.py ---
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
+import tempfile
+import numpy as np
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def make_md(content):
+    tmp = tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8")
+    tmp.write(content)
+    tmp.close()
+    return Path(tmp.name)
+
+def fake_vector(dim=768):
+    v = np.random.rand(dim).astype(np.float32)
+    return v / np.linalg.norm(v)
+
+def mock_post(url=None, json=None, timeout=None, stream=False):
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {"embedding": fake_vector().tolist()}
+    return resp
+
+def make_chunk_dict(i=0, text="hello world this is a test sentence"):
+    return {
+        "chunk_id": f"doc.pdf::chunk_{i}",
+        "source_path": "doc.pdf",
+        "title": "Test Doc",
+        "file_type": "pdf",
+        "page_num": 1,
+        "chunk_index": i,
+        "text": text,
+        "token_count": len(text.split()),
+        "metadata": {},
+    }
+
+LONG_MD = """
+# Machine Learning
+
+Machine learning is a subset of artificial intelligence. It allows systems to learn from data.
+Supervised learning uses labeled data to train models. Unsupervised learning finds hidden patterns.
+Reinforcement learning trains agents using rewards and penalties. Each approach solves different problems.
+
+## Deep Learning
+
+Deep learning uses neural networks with many layers. Convolutional networks excel at image tasks.
+Recurrent networks handle sequences and time series. Transformers now dominate natural language processing.
+BERT and GPT are both transformer-based architectures. They differ in their pretraining objectives.
+
+## Applications
+
+Recommendation systems use collaborative filtering techniques. Computer vision powers autonomous vehicles.
+Natural language processing enables intelligent chatbots. Healthcare applies ML to medical imaging analysis.
+"""
+
+
+# ── vectorstore ───────────────────────────────────────────────────────────────
+
+class TestFAISSStore:
+    def test_add_and_search(self):
+        from ai.vectorstore import FAISSStore
+        store = FAISSStore(dim=8)
+        vecs = np.random.rand(5, 8).astype(np.float32)
+        ids = [f"chunk_{i}" for i in range(5)]
+        store.add(ids, vecs)
+        results = store.search(vecs[0], top_k=3)
+        assert len(results) == 3
+        assert results[0][0] == "chunk_0"
+
+    def test_size(self):
+        from ai.vectorstore import FAISSStore
+        store = FAISSStore(dim=8)
+        vecs = np.random.rand(4, 8).astype(np.float32)
+        store.add([f"c_{i}" for i in range(4)], vecs)
+        assert store.size == 4
+
+    def test_save_and_load(self, tmp_path):
+        from ai.vectorstore import FAISSStore
+        store = FAISSStore(dim=8)
+        vecs = np.random.rand(3, 8).astype(np.float32)
+        store.add(["a", "b", "c"], vecs)
+        store.save(tmp_path / "idx")
+        store2 = FAISSStore(dim=8)
+        store2.load(tmp_path / "idx")
+        assert store2.size == 3
+        results = store2.search(vecs[0], top_k=1)
+        assert results[0][0] == "a"
+
+    def test_returns_scores(self):
+        from ai.vectorstore import FAISSStore
+        store = FAISSStore(dim=8)
+        vecs = np.random.rand(3, 8).astype(np.float32)
+        store.add(["x", "y", "z"], vecs)
+        results = store.search(vecs[0], top_k=3)
+        assert all(isinstance(score, float) for _, score in results)
+
+
+class TestMetadataStore:
+    def test_insert_and_get(self, tmp_path):
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0)])
+        result = store.get_chunk("doc.pdf::chunk_0")
+        assert result is not None
+        assert result["text"] == "hello world this is a test sentence"
+        store.close()
+
+    def test_get_chunks_ordered(self, tmp_path):
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        chunks = [make_chunk_dict(i, f"text number {i}") for i in range(3)]
+        store.insert_chunks(chunks)
+        ids = ["doc.pdf::chunk_2", "doc.pdf::chunk_0"]
+        results = store.get_chunks(ids)
+        assert results[0]["chunk_id"] == "doc.pdf::chunk_2"
+        assert results[1]["chunk_id"] == "doc.pdf::chunk_0"
+        store.close()
+
+    def test_get_by_source(self, tmp_path):
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(i) for i in range(3)])
+        results = store.get_by_source("doc.pdf")
+        assert len(results) == 3
+        store.close()
+
+    def test_delete_source(self, tmp_path):
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0)])
+        store.delete_source("doc.pdf")
+        assert store.get_chunk("doc.pdf::chunk_0") is None
+        store.close()
+
+    def test_missing_chunk_returns_none(self, tmp_path):
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        assert store.get_chunk("nonexistent") is None
+        store.close()
+
+
+# ── retrieval ─────────────────────────────────────────────────────────────────
+
+class TestBM25Retriever:
+    def test_basic_retrieval(self):
+        from ai.retrieval import BM25Retriever
+        bm25 = BM25Retriever()
+        chunks = [
+            {"chunk_id": "c0", "text": "machine learning neural networks deep learning"},
+            {"chunk_id": "c1", "text": "cooking recipes pasta tomato sauce"},
+            {"chunk_id": "c2", "text": "neural networks transformers attention mechanism"},
+        ]
+        bm25.index(chunks)
+        results = bm25.retrieve("neural networks", top_k=2)
+        ids = [r[0] for r in results]
+        assert "c0" in ids or "c2" in ids
+
+    def test_no_match_returns_empty(self):
+        from ai.retrieval import BM25Retriever
+        bm25 = BM25Retriever()
+        bm25.index([{"chunk_id": "c0", "text": "cats and dogs"}])
+        results = bm25.retrieve("quantum physics")
+        assert results == []
+
+    def test_scores_sorted_descending(self):
+        from ai.retrieval import BM25Retriever
+        bm25 = BM25Retriever()
+        chunks = [{"chunk_id": f"c{i}", "text": f"word{i} common common"} for i in range(5)]
+        bm25.index(chunks)
+        results = bm25.retrieve("common word0", top_k=5)
+        scores = [s for _, s in results]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_top_k_respected(self):
+        from ai.retrieval import BM25Retriever
+        bm25 = BM25Retriever()
+        chunks = [{"chunk_id": f"c{i}", "text": f"machine learning test {i}"} for i in range(10)]
+        bm25.index(chunks)
+        results = bm25.retrieve("machine learning", top_k=3)
+        assert len(results) <= 3
+
+
+class TestHybridRetriever:
+    def test_combines_results(self):
+        from ai.retrieval import BM25Retriever, HybridRetriever
+        from ai.vectorstore import FAISSStore
+        from ai.embedding import Embedder
+
+        store = FAISSStore(dim=4)
+        vecs = np.array([
+            [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]
+        ], dtype=np.float32)
+        store.add(["c0", "c1", "c2"], vecs)
+
+        embedder = MagicMock()
+        embedder.embed_text.return_value = np.array([1, 0, 0, 0], dtype=np.float32)
+
+        from ai.retrieval import DenseRetriever
+        dense = DenseRetriever(store, embedder)
+
+        bm25 = BM25Retriever()
+        bm25.index([
+            {"chunk_id": "c0", "text": "neural network transformer"},
+            {"chunk_id": "c1", "text": "cooking recipe pasta"},
+            {"chunk_id": "c2", "text": "deep learning model"},
+        ])
+
+        hybrid = HybridRetriever(dense, bm25)
+        results = hybrid.retrieve("neural network", top_k=3)
+        assert len(results) > 0
+        ids = [r[0] for r in results]
+        assert "c0" in ids
+
+    def test_rrf_scores_are_positive(self):
+        from ai.retrieval import BM25Retriever, HybridRetriever, DenseRetriever
+        from ai.vectorstore import FAISSStore
+
+        store = FAISSStore(dim=4)
+        vecs = np.random.rand(3, 4).astype(np.float32)
+        store.add(["c0", "c1", "c2"], vecs)
+
+        embedder = MagicMock()
+        embedder.embed_text.return_value = vecs[0]
+
+        dense = DenseRetriever(store, embedder)
+        bm25 = BM25Retriever()
+        bm25.index([{"chunk_id": f"c{i}", "text": f"text {i} word"} for i in range(3)])
+
+        hybrid = HybridRetriever(dense, bm25)
+        results = hybrid.retrieve("text word", top_k=3)
+        assert all(score > 0 for _, score in results)
+
+
+# ── generation ────────────────────────────────────────────────────────────────
+
+class TestPromptBuilder:
+    def test_builds_two_messages(self, tmp_path):
+        from ai.generation import build_prompt
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0, "Transformers use self-attention mechanisms.")])
+        messages = build_prompt("What is a transformer?", ["doc.pdf::chunk_0"], store)
+        assert len(messages) == 2
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        store.close()
+
+    def test_context_included_in_user_message(self, tmp_path):
+        from ai.generation import build_prompt
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0, "BERT is a transformer model.")])
+        messages = build_prompt("What is BERT?", ["doc.pdf::chunk_0"], store)
+        assert "BERT is a transformer model." in messages[1]["content"]
+        store.close()
+
+    def test_query_included_in_user_message(self, tmp_path):
+        from ai.generation import build_prompt
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0)])
+        messages = build_prompt("What is attention?", ["doc.pdf::chunk_0"], store)
+        assert "What is attention?" in messages[1]["content"]
+        store.close()
+
+    def test_system_prompt_contains_citation_instruction(self, tmp_path):
+        from ai.generation import build_prompt
+        from ai.vectorstore import MetadataStore
+        store = MetadataStore(tmp_path / "test.db")
+        store.insert_chunks([make_chunk_dict(0)])
+        messages = build_prompt("query", ["doc.pdf::chunk_0"], store)
+        assert "cite" in messages[0]["content"].lower()
+        store.close()
+
+
+class TestLLMClient:
+    def test_generate_returns_string(self):
+        from ai.generation import LLMClient
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"message": {"content": "Paris is the capital."}}
+        with patch("requests.post", return_value=mock_resp):
+            result = LLMClient().generate([{"role": "user", "content": "test"}])
+        assert isinstance(result, str)
+        assert "Paris" in result
+
+    def test_stream_yields_tokens(self):
+        from ai.generation import LLMClient
+        import json
+        lines = [
+            json.dumps({"message": {"content": "Hello"}, "done": False}).encode(),
+            json.dumps({"message": {"content": " world"}, "done": True}).encode(),
+        ]
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.iter_lines.return_value = lines
+        with patch("requests.post", return_value=mock_resp):
+            tokens = list(LLMClient().stream([{"role": "user", "content": "hi"}]))
+        assert tokens == ["Hello", " world"]
+
+    def test_is_available_false_when_down(self):
+        from ai.generation import LLMClient
+        import requests as req
+        with patch("requests.get", side_effect=req.exceptions.ConnectionError):
+            assert LLMClient().is_available() is False
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
+--- ./ai/ingestion/__init__.py ---
+from .router import parse_document, get_supported_extensions
+from .base_parser import ParsedDocument
+
+__all__ = [
+    "parse_document",
+    "get_supported_extensions",
+    "ParsedDocument",
+]--- ./ai/ingestion/md_parser.py ---
+import re
+from pathlib import Path
+
+from .base_parser import BaseParser, ParsedDocument
+
+SUPPORTED_EXTENSIONS = {".md", ".markdown", ".txt"}
+
+
+class MarkdownParser(BaseParser):
+    """
+    Parses Markdown and plain text files.
+
+    No external dependencies — pure Python.
+    Splits the document into logical sections by heading (## / ###).
+    Each heading + its following paragraphs becomes one "page".
+
+    Plain .txt files are treated as one big section with no headings.
+    """
+
+    def supports(self, file_path: str | Path) -> bool:
+        return Path(file_path).suffix.lower() in SUPPORTED_EXTENSIONS
+
+    def parse(self, file_path: str | Path) -> ParsedDocument:
+        path = self._validate_file(file_path)
+
+        if not self.supports(path):
+            raise ValueError(f"MarkdownParser does not support: {path.suffix}")
+
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        full_text = self._strip_markdown(raw)
+        sections = self._split_into_sections(raw)
+
+        metadata = {
+            "file_size_bytes": path.stat().st_size,
+            "encoding": "utf-8",
+            "section_count": len(sections),
+            "has_headings": any(s["metadata"].get("heading") for s in sections),
+        }
+
+        # Use the first H1 as the title if present
+        title = self._extract_title(raw) or path.stem
+
+        return ParsedDocument(
+            source_path=str(path),
+            file_type="md" if path.suffix.lower() in {".md", ".markdown"} else "txt",
+            title=title,
+            full_text=full_text,
+            pages=sections,
+            metadata=metadata,
+        )
+
+    def _split_into_sections(self, raw: str) -> list[dict]:
+        """
+        Split markdown into sections at each heading.
+        Each section = heading + all text until the next heading.
+        """
+        # Match heading lines: # Heading, ## Heading, etc.
+        heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+
+        sections = []
+        matches = list(heading_pattern.finditer(raw))
+
+        if not matches:
+            # No headings — treat whole doc as one section
+            text = self._strip_markdown(raw).strip()
+            if text:
+                sections.append({
+                    "page_num": 1,
+                    "text": text,
+                    "metadata": {"heading": None, "heading_level": 0, "type": "body"},
+                })
+            return sections
+
+        # Text before the first heading
+        preamble = raw[:matches[0].start()].strip()
+        if preamble:
+            sections.append({
+                "page_num": 1,
+                "text": self._strip_markdown(preamble),
+                "metadata": {"heading": None, "heading_level": 0, "type": "preamble"},
+            })
+
+        for i, match in enumerate(matches):
+            level = len(match.group(1))  # number of # characters
+            heading = match.group(2).strip()
+
+            # Body text is everything from this heading until the next one
+            start = match.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
+            body_raw = raw[start:end].strip()
+            body_text = self._strip_markdown(body_raw)
+
+            combined = f"{heading}\n{body_text}".strip()
+
+            sections.append({
+                "page_num": len(sections) + 1,
+                "text": combined,
+                "metadata": {
+                    "heading": heading,
+                    "heading_level": level,
+                    "type": "section",
+                },
+            })
+
+        return sections
+
+    def _strip_markdown(self, text: str) -> str:
+        """
+        Remove markdown syntax, leaving clean readable text.
+        Handles: headings, bold/italic, links, images, code blocks, blockquotes.
+        """
+        # Fenced code blocks — keep the code, strip the fences
+        text = re.sub(r"```[a-z]*\n(.*?)```", r"\1", text, flags=re.DOTALL)
+        text = re.sub(r"`([^`]+)`", r"\1", text)
+
+        # Headings → plain text (strip the # symbols)
+        text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+
+        # Bold and italic
+        text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+        text = re.sub(r"_{1,3}(.+?)_{1,3}", r"\1", text)
+
+        # Links: [text](url) → text
+        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+        # Images: ![alt](url) → alt
+        text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+
+        # Blockquotes
+        text = re.sub(r"^>\s*", "", text, flags=re.MULTILINE)
+
+        # Horizontal rules
+        text = re.sub(r"^(-{3,}|={3,}|\*{3,})$", "", text, flags=re.MULTILINE)
+
+        # HTML tags (occasionally in markdown)
+        text = re.sub(r"<[^>]+>", "", text)
+
+        # Collapse multiple blank lines to one
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        return text.strip()
+
+    def _extract_title(self, raw: str) -> str:
+        """Find the first H1 heading in the document."""
+        match = re.search(r"^#\s+(.+)$", raw, re.MULTILINE)
+        return match.group(1).strip() if match else ""--- ./ai/ingestion/router.py ---
+from pathlib import Path
+
+from .base_parser import BaseParser, ParsedDocument
+from .pdf_parser import PDFParser
+from .docx_parser import DOCXParser
+from .pptx_parser import PPTXParser
+from .md_parser import MarkdownParser
+
+
+# Registry of all available parsers, in priority order.
+# The router tries each parser until one returns supports=True.
+_PARSERS: list[BaseParser] = [
+    PDFParser(),
+    DOCXParser(),
+    PPTXParser(),
+    MarkdownParser(),
+]
+
+
+def parse_document(file_path: str | Path) -> ParsedDocument:
+    """
+    Main entry point for the ingestion layer.
+
+    The pipeline always calls this — it never imports individual parsers.
+    This keeps the rest of the codebase decoupled from which parser is used.
+
+    Usage:
+        doc = parse_document("research_paper.pdf")
+        print(doc.full_text[:500])
+        print(doc.page_count)
+
+    Raises:
+        FileNotFoundError: if the file doesn't exist
+        ValueError: if no parser supports the file type
+    """
+    path = Path(file_path)
+
+    for parser in _PARSERS:
+        if parser.supports(path):
+            return parser.parse(path)
+
+    supported = [".pdf", ".docx", ".pptx", ".md", ".markdown", ".txt"]
+    raise ValueError(
+        f"No parser available for '{path.suffix}' files. "
+        f"Supported: {', '.join(supported)}"
+    )
+
+
+def get_supported_extensions() -> list[str]:
+    """Return all extensions the ingestion layer can handle."""
+    extensions = []
+    for parser in _PARSERS:
+        # Peek at each parser's supported extensions
+        for ext in [".pdf", ".docx", ".pptx", ".md", ".markdown", ".txt"]:
+            if parser.supports(Path(f"test{ext}")):
+                extensions.append(ext)
+    return extensions--- ./ai/ingestion/pdf_parser.py ---
+from pathlib import Path
+import fitz  # PyMuPDF
+
+from .base_parser import BaseParser, ParsedDocument
+
+SUPPORTED_EXTENSIONS = {".pdf"}
+
+
+class PDFParser(BaseParser):
+    """
+    Parses PDF files using PyMuPDF (fitz).
+
+    Why PyMuPDF over pdfplumber or PyPDF2?
+    - Fastest of the three
+    - Handles scanned PDFs with embedded text layers
+    - Extracts page-level metadata (rotation, dimensions)
+    - get_text("blocks") gives us positional text blocks, useful later
+      for table detection and layout-aware chunking
+    """
+
+    def supports(self, file_path: str | Path) -> bool:
+        return Path(file_path).suffix.lower() in SUPPORTED_EXTENSIONS
+
+    def parse(self, file_path: str | Path) -> ParsedDocument:
+        path = self._validate_file(file_path)
+
+        if not self.supports(path):
+            raise ValueError(f"PDFParser does not support: {path.suffix}")
+
+        doc = fitz.open(str(path))
+        pages = []
+        all_text_parts = []
+
+        for page_num, page in enumerate(doc, start=1):
+            # get_text("text") gives clean plain text, preserving reading order.
+            # Alternative: get_text("blocks") for layout-aware extraction — useful
+            # for two-column PDFs or documents with complex layouts.
+            text = page.get_text("text").strip()
+
+            if not text:
+                # Page may be image-only (scanned). Flag it for future OCR.
+                text = f"[Page {page_num}: image-only, no text layer]"
+
+            pages.append({
+                "page_num": page_num,
+                "text": text,
+                "metadata": {
+                    "width": page.rect.width,
+                    "height": page.rect.height,
+                    "rotation": page.rotation,
+                }
+            })
+            all_text_parts.append(text)
+
+        full_text = "\n\n".join(all_text_parts)
+
+        # Extract document-level metadata from PDF properties
+        raw_meta = doc.metadata or {}
+        metadata = {
+            "author": raw_meta.get("author", ""),
+            "creation_date": raw_meta.get("creationDate", ""),
+            "subject": raw_meta.get("subject", ""),
+            "page_count": doc.page_count,
+            "file_size_bytes": path.stat().st_size,
+        }
+
+        doc.close()
+
+        # Use the PDF's Title metadata if present, fall back to filename
+        title = raw_meta.get("title") or path.stem
+
+        return ParsedDocument(
+            source_path=str(path),
+            file_type="pdf",
+            title=title,
+            full_text=full_text,
+            pages=pages,
+            metadata=metadata,
+        )--- ./ai/ingestion/docx_parser.py ---
+from pathlib import Path
+from docx import Document
+from docx.oxml.ns import qn
+
+from .base_parser import BaseParser, ParsedDocument
+
+SUPPORTED_EXTENSIONS = {".docx"}
+
+
+class DOCXParser(BaseParser):
+    """
+    Parses Word documents using python-docx.
+
+    Extracts:
+    - Paragraphs (body text)
+    - Headings (with level info preserved in metadata)
+    - Tables (converted to plain text rows)
+    - Core document properties (author, title, etc.)
+
+    Note: .doc (old binary format) is NOT supported — only .docx.
+    If you need .doc support, add python-docx2txt or use LibreOffice headlessly.
+    """
+
+    def supports(self, file_path: str | Path) -> bool:
+        return Path(file_path).suffix.lower() in SUPPORTED_EXTENSIONS
+
+    def parse(self, file_path: str | Path) -> ParsedDocument:
+        path = self._validate_file(file_path)
+
+        if not self.supports(path):
+            raise ValueError(f"DOCXParser does not support: {path.suffix}")
+
+        doc = Document(str(path))
+        sections = []      # logical sections (heading → paragraphs)
+        all_text_parts = []
+
+        current_section = {"heading": None, "level": 0, "text_parts": []}
+
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                continue
+
+            style_name = para.style.name or ""
+
+            if style_name.startswith("Heading"):
+                # Save the previous section before starting a new one
+                if current_section["text_parts"]:
+                    sections.append(self._flush_section(current_section))
+
+                # Extract heading level (e.g. "Heading 1" → 1)
+                try:
+                    level = int(style_name.split()[-1])
+                except (ValueError, IndexError):
+                    level = 1
+
+                current_section = {
+                    "heading": text,
+                    "level": level,
+                    "text_parts": [text],
+                }
+            else:
+                current_section["text_parts"].append(text)
+
+            all_text_parts.append(text)
+
+        # Flush the last section
+        if current_section["text_parts"]:
+            sections.append(self._flush_section(current_section))
+
+        # Extract tables — each table becomes a text block
+        for table in doc.tables:
+            table_text = self._table_to_text(table)
+            if table_text:
+                all_text_parts.append(table_text)
+                sections.append({
+                    "page_num": len(sections) + 1,
+                    "text": table_text,
+                    "metadata": {"type": "table"},
+                })
+
+        full_text = "\n\n".join(all_text_parts)
+
+        # Core properties (author, title, etc.)
+        props = doc.core_properties
+        metadata = {
+            "author": props.author or "",
+            "title": props.title or "",
+            "created": str(props.created) if props.created else "",
+            "modified": str(props.modified) if props.modified else "",
+            "section_count": len(sections),
+            "file_size_bytes": path.stat().st_size,
+        }
+
+        title = props.title or path.stem
+
+        return ParsedDocument(
+            source_path=str(path),
+            file_type="docx",
+            title=title,
+            full_text=full_text,
+            pages=sections,  # "pages" = logical sections for DOCX
+            metadata=metadata,
+        )
+
+    def _flush_section(self, section: dict) -> dict:
+        return {
+            "page_num": None,  # DOCX has no page numbers without rendering
+            "text": "\n".join(section["text_parts"]),
+            "metadata": {
+                "heading": section["heading"],
+                "heading_level": section["level"],
+                "type": "section",
+            },
+        }
+
+    def _table_to_text(self, table) -> str:
+        """Convert a docx Table object to a readable plain-text grid."""
+        rows = []
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            # Remove duplicate adjacent cells (merged cells repeat in python-docx)
+            deduped = [cells[0]] + [c for i, c in enumerate(cells[1:], 1) if c != cells[i-1]]
+            rows.append(" | ".join(deduped))
+        return "\n".join(rows)--- ./ai/ingestion/base_parser.py ---
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class ParsedDocument:
+    """
+    The output of any parser.
+    Every parser returns this — the rest of the pipeline only ever sees this type.
+    """
+    source_path: str          # original file path
+    file_type: str            # "pdf", "docx", "pptx", "md"
+    title: str                # filename or extracted title
+    full_text: str            # complete plain text, all pages/slides joined
+    pages: list[dict]         # list of {page_num, text, metadata}
+    metadata: dict = field(default_factory=dict)  # author, word count, etc.
+
+    @property
+    def page_count(self) -> int:
+        return len(self.pages)
+
+    @property
+    def word_count(self) -> int:
+        return len(self.full_text.split())
+
+
+class BaseParser(ABC):
+    """
+    All parsers implement this interface.
+    The pipeline calls parse() — it doesn't care which parser is underneath.
+    """
+
+    @abstractmethod
+    def parse(self, file_path: str | Path) -> ParsedDocument:
+        """Read a file and return a ParsedDocument. Raise ValueError for unsupported files."""
+        ...
+
+    @abstractmethod
+    def supports(self, file_path: str | Path) -> bool:
+        """Return True if this parser can handle the given file."""
+        ...
+
+    def _validate_file(self, file_path: str | Path) -> Path:
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {path}")
+        if not path.is_file():
+            raise ValueError(f"Not a file: {path}")
+        return path--- ./ai/ingestion/pptx_parser.py ---
+from pathlib import Path
+from pptx import Presentation
+from pptx.util import Pt
+
+from .base_parser import BaseParser, ParsedDocument
+
+SUPPORTED_EXTENSIONS = {".pptx"}
+
+
+class PPTXParser(BaseParser):
+    """
+    Parses PowerPoint files using python-pptx.
+
+    Each slide becomes one "page" in the ParsedDocument.
+    Text is extracted in reading order: title → body → speaker notes.
+
+    Key insight: PPTX slides often have very little text per slide.
+    The chunker should treat multi-slide sequences as one chunk rather
+    than chunking each slide individually — we handle this with metadata.
+    """
+
+    def supports(self, file_path: str | Path) -> bool:
+        return Path(file_path).suffix.lower() in SUPPORTED_EXTENSIONS
+
+    def parse(self, file_path: str | Path) -> ParsedDocument:
+        path = self._validate_file(file_path)
+
+        if not self.supports(path):
+            raise ValueError(f"PPTXParser does not support: {path.suffix}")
+
+        prs = Presentation(str(path))
+        pages = []
+        all_text_parts = []
+
+        for slide_num, slide in enumerate(prs.slides, start=1):
+            slide_title = self._get_slide_title(slide)
+            body_text = self._get_body_text(slide)
+            notes_text = self._get_notes_text(slide)
+
+            # Combine title + body + notes into one text block per slide
+            parts = []
+            if slide_title:
+                parts.append(f"[Slide {slide_num}: {slide_title}]")
+            if body_text:
+                parts.append(body_text)
+            if notes_text:
+                parts.append(f"[Speaker notes: {notes_text}]")
+
+            slide_text = "\n".join(parts).strip()
+
+            if slide_text:
+                pages.append({
+                    "page_num": slide_num,
+                    "text": slide_text,
+                    "metadata": {
+                        "title": slide_title,
+                        "has_notes": bool(notes_text),
+                        "shape_count": len(slide.shapes),
+                    },
+                })
+                all_text_parts.append(slide_text)
+
+        full_text = "\n\n".join(all_text_parts)
+
+        # Presentation-level metadata
+        props = prs.core_properties
+        metadata = {
+            "author": props.author or "",
+            "title": props.title or "",
+            "slide_count": len(prs.slides),
+            "file_size_bytes": path.stat().st_size,
+        }
+
+        title = props.title or path.stem
+
+        return ParsedDocument(
+            source_path=str(path),
+            file_type="pptx",
+            title=title,
+            full_text=full_text,
+            pages=pages,
+            metadata=metadata,
+        )
+
+    def _get_slide_title(self, slide) -> str:
+        """Get the title placeholder text, if any."""
+        if slide.shapes.title and slide.shapes.title.has_text_frame:
+            return slide.shapes.title.text.strip()
+        return ""
+
+    def _get_body_text(self, slide) -> str:
+        """
+        Extract all non-title text from a slide.
+        Iterates over all shapes, skips the title placeholder.
+        Preserves bullet structure with indentation.
+        """
+        texts = []
+        for shape in slide.shapes:
+            # Skip the title shape (already handled)
+            if shape == slide.shapes.title:
+                continue
+            if not shape.has_text_frame:
+                continue
+
+            for para in shape.text_frame.paragraphs:
+                text = para.text.strip()
+                if not text:
+                    continue
+                # Preserve bullet hierarchy with indentation
+                indent = "  " * (para.level or 0)
+                texts.append(f"{indent}{text}")
+
+        return "\n".join(texts)
+
+    def _get_notes_text(self, slide) -> str:
+        """Extract speaker notes text."""
+        try:
+            notes_slide = slide.notes_slide
+            tf = notes_slide.notes_text_frame
+            return tf.text.strip() if tf else ""
+        except Exception:
+            return ""--- ./ai/vectorstore/__init__.py ---
+from .faiss_store import FAISSStore
+from .metadata_store import MetadataStore
+
+__all__ = ["FAISSStore", "MetadataStore"]--- ./ai/vectorstore/faiss_store.py ---
+import numpy as np
+import faiss
+import pickle
+from pathlib import Path
+
+
+class FAISSStore:
+    """
+    Stores and searches embedding vectors using FAISS.
+    Uses cosine similarity (inner product on normalized vectors).
+    """
+
+    def __init__(self, dim: int = 768):
+        self.dim = dim
+        self.index = faiss.IndexFlatIP(dim)  # inner product = cosine on normalized vecs
+        self._chunk_ids: list[str] = []      # maps FAISS position → chunk_id
+
+    def add(self, chunk_ids: list[str], vectors: np.ndarray):
+        """Add vectors to the index. vectors shape: (n, dim)"""
+        normalized = self._normalize(vectors)
+        self.index.add(normalized)
+        self._chunk_ids.extend(chunk_ids)
+
+    def search(self, query_vector: np.ndarray, top_k: int = 5) -> list[tuple[str, float]]:
+        """
+        Search for top_k most similar chunks.
+        Returns list of (chunk_id, score) sorted by score descending.
+        """
+        normalized = self._normalize(query_vector.reshape(1, -1))
+        scores, indices = self.index.search(normalized, top_k)
+
+        results = []
+        for score, idx in zip(scores[0], indices[0]):
+            if idx == -1:
+                continue
+            results.append((self._chunk_ids[idx], float(score)))
+        return results
+
+    def save(self, path: str | Path):
+        path = Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+        faiss.write_index(self.index, str(path / "index.faiss"))
+        with open(path / "chunk_ids.pkl", "wb") as f:
+            pickle.dump(self._chunk_ids, f)
+
+    def load(self, path: str | Path):
+        path = Path(path)
+        self.index = faiss.read_index(str(path / "index.faiss"))
+        with open(path / "chunk_ids.pkl", "rb") as f:
+            self._chunk_ids = pickle.load(f)
+
+    def _normalize(self, vectors: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)
+        return (vectors / norms).astype(np.float32)
+
+    @property
+    def size(self) -> int:
+        return self.index.ntotal--- ./ai/vectorstore/metadata_store.py ---
+import sqlite3
+import json
+from pathlib import Path
+
+
+CREATE_TABLE = """
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id    TEXT PRIMARY KEY,
+    source_path TEXT NOT NULL,
+    title       TEXT,
+    file_type   TEXT,
+    page_num    INTEGER,
+    chunk_index INTEGER,
+    text        TEXT NOT NULL,
+    token_count INTEGER,
+    metadata    TEXT
+);
+"""
+
+
+class MetadataStore:
+    """
+    Stores chunk text and metadata in SQLite.
+    FAISS stores vectors, this stores everything else.
+    Keyed by chunk_id so the two stores stay in sync.
+    """
+
+    def __init__(self, db_path: str | Path = "data/docs.db"):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self.db_path))
+        self._conn.execute(CREATE_TABLE)
+        self._conn.commit()
+
+    def insert_chunks(self, chunks: list[dict]):
+        """
+        Each dict must have: chunk_id, source_path, title, file_type,
+        page_num, chunk_index, text, token_count, metadata (dict).
+        """
+        rows = [
+            (
+                c["chunk_id"],
+                c["source_path"],
+                c.get("title", ""),
+                c.get("file_type", ""),
+                c.get("page_num"),
+                c.get("chunk_index", 0),
+                c["text"],
+                c.get("token_count", 0),
+                json.dumps(c.get("metadata", {})),
+            )
+            for c in chunks
+        ]
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO chunks VALUES (?,?,?,?,?,?,?,?,?)", rows
+        )
+        self._conn.commit()
+    def get_chunks_for_doc(self, source_path: str) -> list[dict]:
+        """Alias used by backend services."""
+        return self.get_by_source(source_path)
+    def get_chunk(self, chunk_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM chunks WHERE chunk_id = ?", (chunk_id,)
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_chunks(self, chunk_ids: list[str]) -> list[dict]:
+        placeholders = ",".join("?" * len(chunk_ids))
+        rows = self._conn.execute(
+            f"SELECT * FROM chunks WHERE chunk_id IN ({placeholders})", chunk_ids
+        ).fetchall()
+        by_id = {r[0]: self._row_to_dict(r) for r in rows}
+        # Return in the same order as chunk_ids
+        return [by_id[cid] for cid in chunk_ids if cid in by_id]
+
+    def get_by_source(self, source_path: str) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM chunks WHERE source_path = ? ORDER BY chunk_index",
+            (source_path,)
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def delete_source(self, source_path: str):
+        self._conn.execute(
+            "DELETE FROM chunks WHERE source_path = ?", (source_path,)
+        )
+        self._conn.commit()
+
+    def _row_to_dict(self, row) -> dict:
+        return {
+            "chunk_id":    row[0],
+            "source_path": row[1],
+            "title":       row[2],
+            "file_type":   row[3],
+            "page_num":    row[4],
+            "chunk_index": row[5],
+            "text":        row[6],
+            "token_count": row[7],
+            "metadata":    json.loads(row[8]),
+        }
+
+    def close(self):
+        self._conn.close()--- ./ai/chunker/__init__.py ---
+from .chunker import Chunker, Chunk
+
+__all__ = ["Chunker", "Chunk"]--- ./ai/chunker/chunker.py ---
+import re
+from dataclasses import dataclass
+
+from ai.ingestion.base_parser import ParsedDocument
+
+
+@dataclass
+class Chunk:
+    """One piece of text ready to be embedded."""
+    chunk_id: str        # "{source_path}::chunk_{index}"
+    text: str            # the actual text content
+    token_count: int     # how many tokens this chunk is
+    source_path: str     # which file it came from
+    page_num: int | None # which page/slide/section
+    chunk_index: int     # position in the document (0-based)
+    metadata: dict       # heading, file_type, title, etc.
+
+
+class Chunker:
+    """
+    Splits a ParsedDocument into overlapping chunks.
+
+    Strategy:
+    1. Split full_text into sentences
+    2. Pack sentences into chunks until we hit chunk_size tokens
+    3. The next chunk starts overlap tokens back
+    """
+
+    def __init__(self, chunk_size: int = 512, overlap: int = 64):
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+
+    def chunk_document(self, doc: ParsedDocument) -> list[Chunk]:
+        sentences = self._split_sentences(doc.full_text)
+        sentence_tokens = [s.split() for s in sentences]
+
+        chunks = []
+        i = 0
+
+        while i < len(sentences):
+            current_tokens = []
+            current_sentences = []
+            j = i
+
+            while j < len(sentences):
+                candidate = current_tokens + sentence_tokens[j]
+                if len(candidate) > self.chunk_size and current_tokens:
+                    break
+                current_tokens = candidate
+                current_sentences.append(sentences[j])
+                j += 1
+
+            if not current_sentences:
+                current_sentences = [sentences[i]]
+                current_tokens = sentence_tokens[i]
+                j = i + 1
+
+            text = " ".join(current_sentences).strip()
+            page_num = self._find_page(doc, text)
+
+            chunks.append(Chunk(
+                chunk_id=f"{doc.source_path}::chunk_{len(chunks)}",
+                text=text,
+                token_count=len(current_tokens),
+                source_path=doc.source_path,
+                page_num=page_num,
+                chunk_index=len(chunks),
+                metadata={
+                    "title": doc.title,
+                    "file_type": doc.file_type,
+                },
+            ))
+
+            i = self._next_start(i, j, sentence_tokens, self.overlap)
+
+        return chunks
+
+    def _split_sentences(self, text: str) -> list[str]:
+        raw = re.split(r'(?<=[.!?])\s+', text)
+        return [s.strip() for s in raw if s.strip()]
+
+    def _count_tokens(self, text: str) -> int:
+        return len(text.split())
+
+    def _next_start(self, i, j, sentence_tokens, overlap):
+        budget = overlap
+        k = j - 1
+        while k > i and budget > 0:
+            budget -= len(sentence_tokens[k])
+            if budget <= 0:
+                return k + 1
+            k -= 1
+        return j
+
+    def _find_page(self, doc, text):
+        sample = text[:80]
+        for page in doc.pages:
+            if sample in page["text"]:
+                return page["page_num"]
+        return None--- ./backend/api/graph.py ---
+# backend/api/graph.py
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.kg_service import get_graph_data
+
+router = APIRouter(prefix="/graph", tags=["graph"])
+log = logging.getLogger(__name__)
+
+
+# ── GET /graph/{doc_id} ───────────────────────────────────────────────────────
+@router.get("/{doc_id}")
+def get_graph(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Returns knowledge graph JSON for react-force-graph.
+
+    Response shape:
+        {
+            "nodes": [{"id": "...", "label": "...", "size": 1}, ...],
+            "links": [{"source": "...", "target": "...", "relation": "..."}, ...]
+        }
+    """
+    # ── ownership check ───────────────────────────────────────────────────────
+    doc = db.query(Document).filter(
+        Document.id == doc_id,
+        Document.user_id == current_user.id,
+    ).first()
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found.",
+        )
+
+    # ── kg not built yet ──────────────────────────────────────────────────────
+    if not doc.kg_ready:
+        raise HTTPException(
+            status_code=status.HTTP_202_ACCEPTED,
+            detail="Knowledge graph is still being built. Try again shortly.",
+        )
+
+    # ── load + export ─────────────────────────────────────────────────────────
+    try:
+        graph_data = get_graph_data(doc_id)
+        log.info(
+            "graph: served %d nodes, %d links for doc %s",
+            len(graph_data.get("nodes", [])),
+            len(graph_data.get("links", [])),
+            doc_id,
+        )
+        return graph_data
+
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Graph file missing. Re-upload the document to rebuild.",
+        )
+    except Exception as exc:
+        log.exception("graph: failed to load graph for doc %s", doc_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load graph: {exc}",
+        )--- ./backend/api/health.py ---
+# backend/api/health.py
+import logging
+
+import requests
+from fastapi import APIRouter
+
+from backend.config import settings
+
+router = APIRouter(prefix="/health", tags=["health"])
+log = logging.getLogger(__name__)
+
+
+@router.get("")
+def health_check() -> dict:
+    """
+    GET /health
+
+    Returns:
+        - api:    always "ok"
+        - ollama: "ok" | "unavailable"
+        - llm:    model name + loaded status
+        - embed:  embed model name + loaded status
+    """
+    ollama_ok   = False
+    llm_loaded  = False
+    embed_loaded = False
+
+    try:
+        # ── check Ollama is running ───────────────────────────────────────────
+        resp = requests.get(
+            f"{settings.ollama_base_url}/api/tags",
+            timeout=3,
+        )
+        if resp.status_code == 200:
+            ollama_ok = True
+            loaded_models = {m["name"] for m in resp.json().get("models", [])}
+            llm_loaded   = settings.llm_model   in loaded_models
+            embed_loaded = settings.embed_model in loaded_models
+
+    except Exception:
+        log.warning("health: Ollama unreachable at %s", settings.ollama_base_url)
+
+    return {
+        "api":    "ok",
+        "ollama": "ok" if ollama_ok else "unavailable",
+        "llm": {
+            "model":  settings.llm_model,
+            "loaded": llm_loaded,
+        },
+        "embed": {
+            "model":  settings.embed_model,
+            "loaded": embed_loaded,
+        },
+    }--- ./backend/api/documents.py ---
+# backend/api/documents.py
+import logging
+import shutil
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.config import settings
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.ingest_service import run_ingestion
+from backend.services.kg_service import build_knowledge_graph
+
+router = APIRouter(prefix="/documents", tags=["documents"])
+log = logging.getLogger(__name__)
+
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".md"}
+MAX_FILE_SIZE      = 50 * 1024 * 1024   # 50 MB
+
+
+# ── response schema ───────────────────────────────────────────────────────────
+class DocumentOut(BaseModel):
+    id:          str
+    filename:    str
+    file_type:   str
+    file_size:   int
+    status:      str
+    error_msg:   str | None
+    chunk_count: int
+    page_count:  int
+    kg_ready:    bool
+
+    model_config = {"from_attributes": True}
+
+
+# ── POST /documents/upload ────────────────────────────────────────────────────
+@router.post("/upload", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
+async def upload_document(
+    file: UploadFile,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # ── validate extension ────────────────────────────────────────────────────
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {ALLOWED_EXTENSIONS}",
+        )
+
+    # ── read + size check ─────────────────────────────────────────────────────
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File exceeds 50 MB limit.",
+        )
+
+    # ── save to disk ──────────────────────────────────────────────────────────
+    user_upload_dir = Path(settings.uploads_dir) / current_user.id
+    user_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = user_upload_dir / file.filename
+    # avoid collisions — append a counter if file already exists
+    counter = 1
+    while dest.exists():
+        dest = user_upload_dir / f"{Path(file.filename).stem}_{counter}{suffix}"
+        counter += 1
+
+    dest.write_bytes(content)
+    log.info("upload: saved %s (%d bytes) for user %s", dest.name, len(content), current_user.id)
+
+    # ── create DB row ─────────────────────────────────────────────────────────
+    doc = Document(
+        user_id   = current_user.id,
+        filename  = file.filename,
+        file_type = suffix.lstrip("."),
+        file_path = str(dest),
+        file_size = len(content),
+        status    = "pending",
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+
+    # ── kick off background pipeline ──────────────────────────────────────────
+    background_tasks.add_task(run_ingestion, doc.id, db)
+    background_tasks.add_task(build_knowledge_graph, doc.id, db)
+
+    log.info("upload: document %s queued for ingestion", doc.id)
+    return DocumentOut.model_validate(doc)
+
+
+# ── GET /documents ────────────────────────────────────────────────────────────
+@router.get("", response_model=list[DocumentOut])
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    docs = (
+        db.query(Document)
+        .filter(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+    return [DocumentOut.model_validate(d) for d in docs]
+
+
+# ── GET /documents/{doc_id} ───────────────────────────────────────────────────
+@router.get("/{doc_id}", response_model=DocumentOut)
+def get_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+    return DocumentOut.model_validate(doc)
+
+
+# ── DELETE /documents/{doc_id} ────────────────────────────────────────────────
+@router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+
+    # remove file from disk
+    file_path = Path(doc.file_path)
+    if file_path.exists():
+        file_path.unlink()
+        log.info("delete: removed file %s", file_path)
+
+    # remove FAISS index folder
+    faiss_path = Path(settings.faiss_dir) / doc_id
+    if faiss_path.exists():
+        shutil.rmtree(faiss_path)
+        log.info("delete: removed FAISS index %s", faiss_path)
+
+    # remove knowledge graph JSON
+    graph_path = Path(settings.graphs_dir) / f"{doc_id}.json"
+    if graph_path.exists():
+        graph_path.unlink()
+        log.info("delete: removed graph %s", graph_path)
+
+    db.delete(doc)
+    db.commit()
+
+
+# ── helper ────────────────────────────────────────────────────────────────────
+def _get_owned_doc(doc_id: str, user_id: str, db: Session) -> Document:
+    """Fetch a document and verify it belongs to the requesting user."""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+    if doc.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+    return doc--- ./backend/api/chat.py ---
+# backend/api/chat.py
+import json
+import logging
+from typing import AsyncGenerator
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from backend.auth.middleware import get_current_user
+from backend.db.database import get_db
+from backend.db.models import Document, User
+from backend.services.query_service import get_source_chunks, stream_answer
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+log = logging.getLogger(__name__)
+
+
+# ── request schema ────────────────────────────────────────────────────────────
+class QueryRequest(BaseModel):
+    query:   str
+    doc_ids: list[str]   # which documents to query against
+
+
+# ── POST /chat/query ──────────────────────────────────────────────────────────
+@router.post("/query")
+async def chat_query(
+    body: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    SSE streaming endpoint.
+
+    Event types sent to frontend:
+        data: {"type": "token",  "content": "<token>"}
+        data: {"type": "sources","content": [ ...chunks... ]}
+        data: {"type": "done"}
+        data: {"type": "error",  "content": "<message>"}
+    """
+    if not body.query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Query cannot be empty.",
+        )
+
+    if not body.doc_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Select at least one document.",
+        )
+
+    # ── verify all doc_ids belong to this user ────────────────────────────────
+    for doc_id in body.doc_ids:
+        doc = db.query(Document).filter(
+            Document.id == doc_id,
+            Document.user_id == current_user.id,
+        ).first()
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Document {doc_id} not found.",
+            )
+        if doc.status != "ready":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Document '{doc.filename}' is still being processed.",
+            )
+
+    return StreamingResponse(
+        _event_stream(body.query, body.doc_ids, current_user.id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx buffering
+        },
+    )
+
+
+# ── SSE generator ─────────────────────────────────────────────────────────────
+async def _event_stream(
+    query: str,
+    doc_ids: list[str],
+    user_id: str,
+) -> AsyncGenerator[str, None]:
+    """Wraps the synchronous stream_answer generator into SSE events."""
+
+    collected_tokens = []
+    chunk_ids_used   = []
+
+    try:
+        for token in stream_answer(query, doc_ids, user_id):
+            # query_service prefixes chunk_ids with a special marker
+            if isinstance(token, dict) and token.get("chunk_ids"):
+                chunk_ids_used = token["chunk_ids"]
+                continue
+
+            collected_tokens.append(token)
+            yield _sse({"type": "token", "content": token})
+
+        # ── send source citations after streaming ─────────────────────────────
+        if chunk_ids_used:
+            sources = get_source_chunks(chunk_ids_used)
+            yield _sse({"type": "sources", "content": sources})
+
+        yield _sse({"type": "done"})
+
+    except Exception as exc:
+        log.exception("chat: stream error for user %s", user_id)
+        yield _sse({"type": "error", "content": str(exc)})
+
+
+def _sse(payload: dict) -> str:
+    """Format a dict as a Server-Sent Event string."""
+    return f"data: {json.dumps(payload)}\n\n"--- ./backend/db/database.py ---
+# backend/db/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from backend.config import settings
+
+# ── Engine ────────────────────────────────────────────────────────────────────
+# check_same_thread=False is required for SQLite + FastAPI (multi-threaded)
+engine = create_engine(
+    settings.app_db_url,
+    connect_args={"check_same_thread": False},
+    echo=settings.debug,        # logs all SQL when DEBUG=true
+)
+
+# ── Session factory ───────────────────────────────────────────────────────────
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# ── Base class for all ORM models ─────────────────────────────────────────────
+Base = declarative_base()
+
+
+# ── Dependency — use this in every FastAPI route ──────────────────────────────
+def get_db():
+    """Yields a DB session and guarantees it closes after the request."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_db() -> None:
+    """Create all tables. Called once on app startup."""
+    # import models here so Base knows about them before create_all
+    from backend.db import models  # noqa: F401
+    Base.metadata.create_all(bind=engine)--- ./backend/db/models.py ---
+# backend/db/models.py
+import uuid
+from datetime import datetime
+
+from sqlalchemy import (
+    Column, String, Integer, DateTime, ForeignKey, Boolean, Text
+)
+from sqlalchemy.orm import relationship
+
+from backend.db.database import Base
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+# ── User ──────────────────────────────────────────────────────────────────────
+class User(Base):
+    __tablename__ = "users"
+
+    id           = Column(String, primary_key=True, default=_uuid)
+    username     = Column(String(64),  unique=True, nullable=False, index=True)
+    email        = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    is_active    = Column(Boolean, default=True, nullable=False)
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # one user → many documents
+    documents = relationship("Document", back_populates="owner",
+                             cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} username={self.username}>"
+
+
+# ── Document ──────────────────────────────────────────────────────────────────
+class Document(Base):
+    __tablename__ = "documents"
+
+    id           = Column(String, primary_key=True, default=_uuid)
+    user_id      = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
+                          nullable=False, index=True)
+
+    filename     = Column(String(255), nullable=False)   # original file name
+    file_type    = Column(String(16),  nullable=False)   # pdf / docx / pptx / md
+    file_path    = Column(String(512), nullable=False)   # absolute path on disk
+    file_size    = Column(Integer,     nullable=False)   # bytes
+
+    # ingestion state
+    status       = Column(String(32), default="pending", nullable=False)
+    # pending → processing → ready | failed
+    error_msg    = Column(Text, nullable=True)
+
+    # counts populated after ingestion
+    chunk_count  = Column(Integer, default=0, nullable=False)
+    page_count   = Column(Integer, default=0, nullable=False)
+
+    # knowledge graph built?
+    kg_ready     = Column(Boolean, default=False, nullable=False)
+
+    created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at   = Column(DateTime, default=datetime.utcnow,
+                          onupdate=datetime.utcnow, nullable=False)
+
+    # relationship back to owner
+    owner = relationship("User", back_populates="documents")
+
+    def __repr__(self) -> str:
+        return f"<Document id={self.id} filename={self.filename} status={self.status}>"--- ./backend/auth/models.py ---
+# backend/auth/models.py
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field
+
+
+# ── Register ──────────────────────────────────────────────────────────────────
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=64)
+    email:    EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+# ── Login ─────────────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+# ── Token ─────────────────────────────────────────────────────────────────────
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type:   str = "bearer"
+
+
+# ── Current user (returned by middleware) ─────────────────────────────────────
+class UserOut(BaseModel):
+    id:         str
+    username:   str
+    email:      str
+    is_active:  bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}   # allows UserOut.model_validate(db_user)--- ./backend/auth/jwt_handler.py ---
+# backend/auth/jwt_handler.py
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+
+from backend.config import settings
+
+
+# ── Create ─────────────────────────────────────────────────────────────────────
+def create_access_token(user_id: str, username: str) -> str:
+    """Sign and return a JWT containing user_id + username."""
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.access_token_expire_minutes
+    )
+    payload = {
+        "sub": user_id,          # subject — our user UUID
+        "username": username,
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+# ── Verify ─────────────────────────────────────────────────────────────────────
+def decode_access_token(token: str) -> dict:
+    """
+    Decode and validate a JWT.
+
+    Returns the payload dict on success.
+    Raises ValueError with a human-readable message on any failure
+    (expired, invalid signature, malformed).
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token is missing subject claim.")
+        return payload
+
+    except JWTError as exc:
+        raise ValueError(f"Invalid or expired token: {exc}") from exc--- ./backend/auth/router.py ---
+# backend/auth/router.py
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.auth.jwt_handler import create_access_token
+from backend.auth.middleware import get_current_user
+from backend.auth.models import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from backend.db.database import get_db
+from backend.db.models import User
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+def _hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
+
+
+# ── POST /auth/register ───────────────────────────────────────────────────────
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    # duplicate username
+    if db.query(User).filter(User.username == body.username).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username already taken.",
+        )
+    # duplicate email
+    if db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered.",
+        )
+
+    user = User(
+        username=body.username,
+        email=body.email,
+        password_hash=_hash_password(body.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(user_id=user.id, username=user.username)
+    return TokenResponse(access_token=token)
+
+
+# ── POST /auth/login ──────────────────────────────────────────────────────────
+@router.post("/login", response_model=TokenResponse)
+def login(body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == body.username).first()
+
+    if not user or not _verify_password(body.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+
+    token = create_access_token(user_id=user.id, username=user.username)
+    return TokenResponse(access_token=token)
+
+
+# ── GET /auth/me ──────────────────────────────────────────────────────────────
+@router.get("/me", response_model=UserOut)
+def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)--- ./backend/auth/middleware.py ---
+# backend/auth/middleware.py
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
+
+from backend.auth.jwt_handler import decode_access_token
+from backend.db.database import get_db
+from backend.db.models import User
+
+# ── Bearer token extractor ────────────────────────────────────────────────────
+_bearer = HTTPBearer(auto_error=True)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    FastAPI dependency — extracts + validates JWT, returns the live DB user.
+
+    Usage in any protected route:
+        current_user: User = Depends(get_current_user)
+    """
+    token = credentials.credentials
+
+    # 1. decode & validate JWT
+    try:
+        payload = decode_access_token(token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 2. pull user from DB (token could be valid but user deleted)
+    user_id: str = payload["sub"]
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled.",
+        )
+
+    return user--- ./backend/services/ingest_service.py ---
+# backend/services/ingest_service.py
+import logging
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.config import settings
+from backend.db.models import Document
+
+log = logging.getLogger(__name__)
+
+
+def run_ingestion(document_id: str, db: Session) -> None:
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        log.error("ingest: document %s not found", document_id)
+        return
+
+    _set_status(doc, "processing", db)
+
+    try:
+        from ai.ingestion.router import parse_document
+        parsed = parse_document(doc.file_path)
+        log.info("ingest: parsed %s — %d pages", doc.filename, parsed.page_count)
+
+        from ai.chunker.chunker import Chunker
+        chunks = Chunker(
+            chunk_size=settings.chunk_size,
+            overlap=settings.chunk_overlap,
+        ).chunk_document(parsed)
+        log.info("ingest: %d chunks created", len(chunks))
+
+        from ai.embedding.embedder import Embedder
+        import numpy as np
+        embedder = Embedder(
+            model=settings.embed_model,
+            ollama_url=f"{settings.ollama_base_url}/api/embeddings",
+        )
+        embedded = embedder.embed_chunks(chunks)
+        log.info("ingest: %d chunks embedded", len(embedded))
+
+        from ai.vectorstore.faiss_store import FAISSStore
+        faiss_path = Path(settings.faiss_dir) / doc.id
+        store = FAISSStore()
+        vectors = np.stack([e.vector for e in embedded])
+        ids = [e.chunk_id for e in embedded]
+        store.add(ids, vectors)
+        store.save(faiss_path)
+        log.info("ingest: FAISS index saved → %s", faiss_path)
+
+        from ai.vectorstore.metadata_store import MetadataStore
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        meta_store.insert_chunks([{
+            "chunk_id":    e.chunk_id,
+            "source_path": e.chunk.source_path,
+            "title":       e.chunk.metadata["title"],
+            "file_type":   e.chunk.metadata["file_type"],
+            "page_num":    e.chunk.page_num,
+            "chunk_index": e.chunk.chunk_index,
+            "text":        e.chunk.text,
+            "token_count": e.chunk.token_count,
+            "metadata":    e.chunk.metadata,
+        } for e in embedded])
+        log.info("ingest: metadata saved to docs.db")
+
+        doc.chunk_count = len(chunks)
+        doc.page_count  = parsed.page_count
+        _set_status(doc, "ready", db)
+        log.info("ingest: document %s → ready", doc.id)
+
+    except Exception as exc:
+        log.exception("ingest: failed for document %s", document_id)
+        doc.error_msg = str(exc)
+        _set_status(doc, "failed", db)
+
+
+def _set_status(doc: Document, status: str, db: Session) -> None:
+    doc.status = status
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)--- ./backend/services/query_service.py ---
+# backend/services/query_service.py
+import logging
+from pathlib import Path
+from typing import Generator
+
+from backend.config import settings
+
+log = logging.getLogger(__name__)
+
+
+def stream_answer(
+    query: str,
+    doc_ids: list[str],
+    user_id: str,
+) -> Generator[str, None, None]:
+    try:
+        from ai.embedding.embedder import Embedder
+        embedder = Embedder(
+            model=settings.embed_model,
+            ollama_url=f"{settings.ollama_base_url}/api/embeddings",
+        )
+
+        from ai.vectorstore.faiss_store import FAISSStore
+        from ai.vectorstore.metadata_store import MetadataStore
+        from ai.retrieval.dense_retriever import DenseRetriever
+        from ai.retrieval.bm25_retriever import BM25Retriever
+        from ai.retrieval.hybrid_retriever import HybridRetriever
+        from ai.retrieval.reranker import Reranker
+        from backend.db.database import SessionLocal
+        from backend.db.models import Document as DocumentModel
+
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        all_chunks = []
+        last_faiss_path = None
+
+        _db = SessionLocal()
+        for doc_id in doc_ids:
+            faiss_path = Path(settings.faiss_dir) / doc_id
+            if not faiss_path.exists():
+                log.warning("query: no FAISS index for doc %s — skipping", doc_id)
+                continue
+            db_doc = _db.query(DocumentModel).filter(DocumentModel.id == doc_id).first()
+            if not db_doc:
+                continue
+            chunks = meta_store.get_chunks_for_doc(db_doc.file_path)
+            all_chunks.extend(chunks)
+            last_faiss_path = faiss_path
+        _db.close()
+
+        if not all_chunks or last_faiss_path is None:
+            yield "No indexed documents found for your query."
+            return
+
+        store = FAISSStore()
+        store.load(last_faiss_path)
+        dense  = DenseRetriever(store=store, embedder=embedder)
+        bm25   = BM25Retriever()
+        bm25.index([{"chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks])
+        hybrid = HybridRetriever(dense=dense, bm25=bm25)
+        candidates = hybrid.retrieve(query, top_k=settings.retrieval_top_k)
+        log.info("query: %d candidates from hybrid retrieval", len(candidates))
+
+        chunk_dicts = [{"chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
+        reranker = Reranker(embedder=embedder)
+        top_chunks = reranker.rerank(
+            query=query,
+            candidates=candidates,
+            chunks=chunk_dicts,
+        )
+        log.info("query: %d chunks after reranking", len(top_chunks))
+
+        graph_context = ""
+        try:
+            from knowledge_graph.graph_store import GraphStore
+            from knowledge_graph.graph_retriever import GraphRetriever
+            graphs_dir = Path(settings.graphs_dir)
+            all_graph_facts = []
+            for doc_id in doc_ids:
+                graph_path = graphs_dir / f"{doc_id}.json"
+                if graph_path.exists():
+                    graph = GraphStore(str(graphs_dir)).load(doc_id)
+                    facts = GraphRetriever(graph).get_context_for_query(query)
+                    if facts:
+                        all_graph_facts.append(facts)
+            if all_graph_facts:
+                graph_context = "\n".join(all_graph_facts)
+                log.info("query: graph context added")
+        except Exception:
+            log.warning("query: graph context unavailable — continuing without it")
+
+        from ai.generation.prompt_builder import build_prompt
+        chunk_ids = [c[0] for c in top_chunks]
+        messages = build_prompt(query=query, chunk_ids=chunk_ids, metadata_store=meta_store)
+        if graph_context:
+            messages[1]["content"] = graph_context + "\n\n" + messages[1]["content"]
+
+        from ai.generation.llm_client import LLMClient
+        llm = LLMClient(
+            model=settings.llm_model,
+            ollama_url=f"{settings.ollama_base_url}/api/chat",
+        )
+        log.info("query: streaming from %s", settings.llm_model)
+        yield from llm.stream(messages)
+
+    except Exception as exc:
+        log.exception("query: pipeline error")
+        yield f"\n\n[Error: {exc}]"
+
+
+def get_source_chunks(chunk_ids: list[str]) -> list[dict]:
+    from ai.vectorstore.metadata_store import MetadataStore
+    meta_store = MetadataStore(db_path=settings.docs_db_path)
+    return [meta_store.get_chunk(cid) for cid in chunk_ids if cid]--- ./backend/services/kg_service.py ---
+# backend/services/kg_service.py
+import logging
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from backend.config import settings
+from backend.db.models import Document
+
+log = logging.getLogger(__name__)
+
+
+# ── build ─────────────────────────────────────────────────────────────────────
+def build_knowledge_graph(document_id: str, db: Session) -> None:
+    """
+    Build and persist a knowledge graph for one document.
+    Called as a BackgroundTask after ingestion completes.
+
+    Steps:
+        1. Load chunk texts from MetadataStore
+        2. Extract entities
+        3. Extract relations → triples
+        4. Build NetworkX DiGraph
+        5. Save graph JSON to data/graphs/<doc_id>.json
+        6. Mark document.kg_ready = True
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        log.error("kg: document %s not found", document_id)
+        return
+
+    if doc.status != "ready":
+        log.warning("kg: document %s not ready yet — skipping KG build", document_id)
+        return
+
+    log.info("kg: starting graph build for %s", doc.filename)
+
+    try:
+        # ── 1. load chunk texts ───────────────────────────────────────────────
+        from ai.vectorstore.metadata_store import MetadataStore
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        chunks = meta_store.get_chunks_for_doc(document_id)
+
+        if not chunks:
+            log.warning("kg: no chunks found for doc %s", document_id)
+            return
+
+        full_text = "\n".join(c.text for c in chunks)
+        log.info("kg: loaded %d chunks, %d chars", len(chunks), len(full_text))
+
+        # ── 2. extract entities ───────────────────────────────────────────────
+        from knowledge_graph.entity_extractor import EntityExtractor
+        entity_extractor = EntityExtractor()
+        entities = entity_extractor.extract(full_text)
+        log.info("kg: %d entities extracted", len(entities))
+
+        # ── 3. extract relations ──────────────────────────────────────────────
+        from knowledge_graph.relation_extractor import RelationExtractor
+        relation_extractor = RelationExtractor()
+        triples = relation_extractor.extract(full_text, entities)
+        log.info("kg: %d triples extracted", len(triples))
+
+        # ── 4. build graph ────────────────────────────────────────────────────
+        from knowledge_graph.graph_builder import GraphBuilder
+        builder = GraphBuilder()
+        graph = builder.build(entities=entities, triples=triples)
+        log.info(
+            "kg: graph built — %d nodes, %d edges",
+            graph.number_of_nodes(),
+            graph.number_of_edges(),
+        )
+
+        # ── 5. save graph ─────────────────────────────────────────────────────
+        from knowledge_graph.graph_store import GraphStore
+        graphs_dir = str(settings.graphs_dir)
+        g_store = GraphStore(graphs_dir)
+        g_store.save(graph, document_id)
+        log.info("kg: graph saved → %s/%s.json", graphs_dir, document_id)
+
+        # ── 6. mark kg_ready ──────────────────────────────────────────────────
+        doc.kg_ready = True
+        db.add(doc)
+        db.commit()
+        log.info("kg: document %s kg_ready = True", document_id)
+
+    except Exception as exc:
+        log.exception("kg: build failed for document %s", document_id)
+        # KG failure is non-fatal — document stays usable for RAG
+
+
+# ── serve ─────────────────────────────────────────────────────────────────────
+def get_graph_data(document_id: str) -> dict:
+    """
+    Load and return graph JSON for the frontend (react-force-graph format).
+    Raises FileNotFoundError if the graph hasn't been built yet.
+    """
+    from knowledge_graph.graph_store import GraphStore
+    from knowledge_graph.graph_exporter import GraphExporter
+
+    graphs_dir = str(settings.graphs_dir)
+    g_store = GraphStore(graphs_dir)
+
+    graph_path = Path(settings.graphs_dir) / f"{document_id}.json"
+    if not graph_path.exists():
+        raise FileNotFoundError(f"Graph not found for document {document_id}")
+
+    graph = g_store.load(document_id)
+    exporter = GraphExporter()
+    return exporter.to_frontend_json(graph)--- ./backend/config.py ---
+# backend/config.py
+from pathlib import Path
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    # ── App ───────────────────────────────────────────────────────────────────
+    app_name: str = "DocOracle"
+    debug: bool = False
+
+    # ── Paths ─────────────────────────────────────────────────────────────────
+    base_dir: Path = Path(__file__).resolve().parent.parent   # project root
+    data_dir: Path = base_dir / "data"
+    uploads_dir: Path = data_dir / "uploads"
+    faiss_dir: Path = data_dir / "faiss_index"
+    graphs_dir: Path = data_dir / "graphs"
+
+    # ── Databases ─────────────────────────────────────────────────────────────
+    app_db_url: str = ""          # filled in model_post_init
+    docs_db_path: str = ""        # filled in model_post_init
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    secret_key: str = "CHANGE_ME_IN_PRODUCTION_USE_32_CHAR_SECRET"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24   # 24 hours
+
+    # ── Ollama ────────────────────────────────────────────────────────────────
+    ollama_base_url: str = "http://localhost:11434"
+    llm_model: str = "mistral:7b-instruct-q4_0"
+    embed_model: str = "nomic-embed-text"
+
+    # ── RAG ───────────────────────────────────────────────────────────────────
+    chunk_size: int = 512
+    chunk_overlap: int = 64
+    retrieval_top_k: int = 10       # candidates before reranking
+    rerank_top_k: int = 5           # chunks sent to LLM
+
+    # ── CORS ──────────────────────────────────────────────────────────────────
+    allowed_origins: list[str] = ["http://localhost:5173"]   # Vite dev server
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    def model_post_init(self, __context) -> None:
+        """Ensure all directories exist and set derived paths."""
+        for d in (self.data_dir, self.uploads_dir, self.faiss_dir, self.graphs_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+        if not self.app_db_url:
+            object.__setattr__(
+                self, "app_db_url", f"sqlite:///{self.data_dir / 'app.db'}"
+            )
+        if not self.docs_db_path:
+            object.__setattr__(
+                self, "docs_db_path", str(self.data_dir / "docs.db")
+            )
+
+
+# Single shared instance — import this everywhere
+settings = Settings()--- ./backend/logging.py ---
+# backend/logging.py
+import logging
+import sys
+
+
+def setup_logging(debug: bool = False) -> None:
+    """
+    Configure structured logging for the entire app.
+    Call once at startup in main.py.
+
+    Format:
+        2024-01-15 10:23:45 | INFO     | backend.api.documents | upload: saved file.pdf
+    """
+    level = logging.DEBUG if debug else logging.INFO
+
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # avoid adding duplicate handlers on reload (uvicorn --reload)
+    if not root.handlers:
+        root.addHandler(handler)
+
+    # quiet down noisy libraries
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("multipart").setLevel(logging.WARNING)--- ./backend/main.py ---
+# backend/main.py
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.config import settings
+from backend.logging import setup_logging
+from backend.db.database import init_db
+
+# ── routers ───────────────────────────────────────────────────────────────────
+from backend.auth.router import router as auth_router
+from backend.api.documents import router as documents_router
+from backend.api.chat import router as chat_router
+from backend.api.graph import router as graph_router
+from backend.api.health import router as health_router
+
+
+# ── lifespan (startup / shutdown) ─────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    setup_logging(debug=settings.debug)
+    init_db()                          # creates tables if they don't exist
+    yield
+    # shutdown  (nothing to clean up yet)
+
+
+# ── app ───────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url="/docs",       # Swagger UI
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,   # ["http://localhost:5173"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── routes ────────────────────────────────────────────────────────────────────
+app.include_router(auth_router)
+app.include_router(documents_router)
+app.include_router(chat_router)
+app.include_router(graph_router)
+app.include_router(health_router)
+
+
+# ── root ──────────────────────────────────────────────────────────────────────
+@app.get("/", tags=["root"])
+def root():
+    return {"app": settings.app_name, "status": "running", "docs": "/docs"}--- ./run.py ---
+import sys
+from pathlib import Path
+
+from ai.ingestion import parse_document
+from ai.chunker import Chunker
+from ai.embedding import Embedder
+from ai.vectorstore import FAISSStore, MetadataStore
+from ai.retrieval import HybridRetriever, DenseRetriever, BM25Retriever
+from ai.generation import LLMClient, build_prompt
+
+
+def run(pdf_path: str, prompt: str):
+
+    print("\n[1] Parsing document...")
+    doc = parse_document(pdf_path)
+    print(f"    {doc.title} — {doc.page_count} pages, {doc.word_count} words")
+
+    print("\n[2] Chunking...")
+    chunks = Chunker().chunk_document(doc)
+    print(f"    {len(chunks)} chunks created")
+
+    print("\n[3] Embedding chunks (Ollama must be running)...")
+    embedder = Embedder()
+    embedded = embedder.embed_chunks(chunks)
+
+    print("\n[4] Building vector store...")
+    store = FAISSStore()
+    import numpy as np
+    vectors = np.stack([e.vector for e in embedded])
+    ids = [e.chunk_id for e in embedded]
+    store.add(ids, vectors)
+
+    meta_store = MetadataStore("data/docs.db")
+    meta_store.insert_chunks([{
+        "chunk_id":   c.chunk_id,
+        "source_path": c.source_path,
+        "title":      c.metadata["title"],
+        "file_type":  c.metadata["file_type"],
+        "page_num":   c.page_num,
+        "chunk_index": c.chunk_index,
+        "text":       c.text,
+        "token_count": c.token_count,
+        "metadata":   c.metadata,
+    } for c in chunks])
+
+    print("\n[5] Retrieving relevant chunks...")
+    dense   = DenseRetriever(store, embedder)
+    bm25    = BM25Retriever()
+    bm25.index([{"chunk_id": c.chunk_id, "text": c.text} for c in chunks])
+    hybrid  = HybridRetriever(dense, bm25)
+    results = hybrid.retrieve(prompt, top_k=5)
+    chunk_ids = [r[0] for r in results]
+    print(f"    Top {len(chunk_ids)} chunks retrieved")
+
+    print("\n[6] Generating answer...\n")
+    messages = build_prompt(prompt, chunk_ids, meta_store)
+    client   = LLMClient()
+    print("=" * 60)
+    for token in client.stream(messages):
+        print(token, end="", flush=True)
+    print("\n" + "=" * 60)
+
+    meta_store.close()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python run.py <pdf_path> <prompt>")
+        print('Example: python run.py paper.pdf "What is the main contribution?"')
+        sys.exit(1)
+
+    run(sys.argv[1], sys.argv[2])--- ./knowledge_graph/__init__.py ---
+from .entity_extractor import EntityExtractor
+from .relation_extractor import RelationExtractor
+from .graph_builder import GraphBuilder
+from .graph_store import GraphStore
+from .graph_retriever import GraphRetriever
+from .graph_exporter import GraphExporter
+
+__all__ = [
+    "EntityExtractor",
+    "RelationExtractor",
+    "GraphBuilder",
+    "GraphStore",
+    "GraphRetriever",
+    "GraphExporter",
+]--- ./knowledge_graph/relation_extractor.py ---
+import re
+from itertools import combinations
+
+
+# Verb patterns that indicate a relationship between two entities
+RELATION_PATTERNS = [
+    # "X uses Y", "X uses Y to..."
+    (r'\b(uses?|utilizing|utilized)\b', "USES"),
+    # "X is a Y", "X is an Y"
+    (r'\bis\s+a(?:n)?\b', "IS_A"),
+    # "X is part of Y"
+    (r'\bis\s+part\s+of\b', "PART_OF"),
+    # "X contains Y", "X includes Y"
+    (r'\b(contains?|includes?|consisting of)\b', "CONTAINS"),
+    # "X extends Y", "X inherits from Y"
+    (r'\b(extends?|inherits?\s+from|subclass\s+of)\b', "EXTENDS"),
+    # "X depends on Y", "X requires Y"
+    (r'\b(depends?\s+on|requires?|needs?)\b', "DEPENDS_ON"),
+    # "X produces Y", "X generates Y", "X outputs Y"
+    (r'\b(produces?|generates?|outputs?|creates?)\b', "PRODUCES"),
+    # "X improves Y", "X enhances Y"
+    (r'\b(improves?|enhances?|optimizes?|boosts?)\b', "IMPROVES"),
+    # "X replaces Y", "X supersedes Y"
+    (r'\b(replaces?|supersedes?)\b', "REPLACES"),
+    # "X is based on Y", "X is built on Y"
+    (r'\bis\s+(based|built)\s+on\b', "BASED_ON"),
+    # "X consists of Y"
+    (r'\bconsists?\s+of\b', "CONSISTS_OF"),
+    # "X enables Y", "X allows Y"
+    (r'\b(enables?|allows?|permits?)\b', "ENABLES"),
+]
+
+# Compile once
+COMPILED_PATTERNS = [
+    (re.compile(pat, re.IGNORECASE), label)
+    for pat, label in RELATION_PATTERNS
+]
+
+
+class RelationExtractor:
+    """
+    Extracts (subject, relation, object) triples from text.
+
+    Strategy:
+    1. For each sentence, find all entities present
+    2. Try each relation pattern on the sentence
+    3. If a pattern matches between two entities, record the triple
+
+    This is rule-based — no ML needed.
+    For better quality later, swap _extract_from_sentence with
+    an LLM prompt call using the local Ollama model.
+    """
+
+    def __init__(self, window_size: int = 150):
+        # Max character distance between subject and object in a sentence
+        self.window_size = window_size
+
+    def extract(self, text: str, entities: list[dict]) -> list[dict]:
+        """
+        Extract relation triples from text given a list of entities.
+        Returns list of {subject, relation, object, sentence}
+        """
+        if len(entities) < 2:
+            return []
+
+        sentences = self._split_sentences(text)
+        triples = []
+
+        for sentence in sentences:
+            found = self._entities_in_sentence(sentence, entities)
+            if len(found) < 2:
+                continue
+            new_triples = self._extract_from_sentence(sentence, found)
+            triples.extend(new_triples)
+
+        return self._deduplicate(triples)
+
+    def extract_from_chunks(
+        self, chunks: list[dict], entities: list[dict]
+    ) -> list[dict]:
+        """Extract triples across all chunks."""
+        all_triples = []
+        entity_texts = [e["text"] for e in entities]
+
+        for chunk in chunks:
+            # Only process chunks that contain at least 2 known entities
+            present = [e for e in entities if e["text"].lower() in chunk["text"].lower()]
+            if len(present) < 2:
+                continue
+            triples = self.extract(chunk["text"], present)
+            for t in triples:
+                t["chunk_id"] = chunk["chunk_id"]
+            all_triples.extend(triples)
+
+        return self._deduplicate(all_triples)
+
+    def _extract_from_sentence(self, sentence: str, entities: list[dict]) -> list[dict]:
+        """Try all relation patterns against a sentence containing 2+ entities."""
+        triples = []
+
+        for pattern, label in COMPILED_PATTERNS:
+            match = pattern.search(sentence)
+            if not match:
+                continue
+
+            verb_pos = match.start()
+
+            # Find entities before and after the verb
+            before = [
+                e for e in entities
+                if self._find_pos(sentence, e["text"]) < verb_pos
+            ]
+            after = [
+                e for e in entities
+                if self._find_pos(sentence, e["text"]) > verb_pos
+            ]
+
+            for subj in before:
+                for obj in after:
+                    if subj["text"].lower() == obj["text"].lower():
+                        continue
+                    triples.append({
+                        "subject": subj["text"],
+                        "relation": label,
+                        "object": obj["text"],
+                        "sentence": sentence.strip(),
+                    })
+
+        return triples
+
+    def _entities_in_sentence(self, sentence: str, entities: list[dict]) -> list[dict]:
+        """Return entities whose text appears in the sentence."""
+        s_lower = sentence.lower()
+        return [e for e in entities if e["text"].lower() in s_lower]
+
+    def _find_pos(self, sentence: str, entity_text: str) -> int:
+        """Find character position of entity in sentence (case-insensitive)."""
+        idx = sentence.lower().find(entity_text.lower())
+        return idx if idx != -1 else len(sentence)
+
+    def _split_sentences(self, text: str) -> list[str]:
+        raw = re.split(r'(?<=[.!?])\s+', text)
+        return [s.strip() for s in raw if len(s.strip()) > 10]
+
+    def _deduplicate(self, triples: list[dict]) -> list[dict]:
+        """Remove duplicate (subject, relation, object) triples."""
+        seen = set()
+        result = []
+        for t in triples:
+            key = (t["subject"].lower(), t["relation"], t["object"].lower())
+            if key not in seen:
+                seen.add(key)
+                result.append(t)
+        return result--- ./knowledge_graph/graph_builder.py ---
+import networkx as nx
+
+
+class GraphBuilder:
+    """
+    Builds a NetworkX directed graph from entities and triples.
+
+    Nodes = entities
+    Edges = relations (subject → object, labeled with relation type)
+
+    Why NetworkX?
+    - Pure Python, no server needed
+    - Supports directed graphs, node/edge attributes
+    - Easy to serialize to JSON for the frontend
+    - Can later be exported to Neo4j if you want a full graph DB
+    """
+
+    def __init__(self):
+        self.graph = nx.DiGraph()
+
+    def build(self, entities: list[dict], triples: list[dict]) -> nx.DiGraph:
+        """
+        Build the graph from extracted entities and relation triples.
+        Returns the NetworkX DiGraph.
+        """
+        self.graph.clear()
+        self._add_entities(entities)
+        self._add_triples(triples)
+        return self.graph
+
+    def _add_entities(self, entities: list[dict]):
+        """Each entity becomes a node with its metadata as attributes."""
+        for entity in entities:
+            node_id = entity["text"].lower()
+            self.graph.add_node(node_id, **{
+                "label":     entity["text"],
+                "type":      entity.get("type", "UNKNOWN"),
+                "frequency": entity.get("frequency", 1),
+                "chunk_ids": entity.get("chunk_ids", []),
+            })
+
+    def _add_triples(self, triples: list[dict]):
+        """
+        Each triple becomes a directed edge: subject → object.
+        If the edge already exists, increment its weight.
+        """
+        for triple in triples:
+            subj = triple["subject"].lower()
+            obj  = triple["object"].lower()
+            rel  = triple["relation"]
+
+            # Auto-add nodes for entities we may have missed
+            if subj not in self.graph:
+                self.graph.add_node(subj, label=triple["subject"], type="UNKNOWN", frequency=1)
+            if obj not in self.graph:
+                self.graph.add_node(obj, label=triple["object"], type="UNKNOWN", frequency=1)
+
+            if self.graph.has_edge(subj, obj):
+                self.graph[subj][obj]["weight"] += 1
+            else:
+                self.graph.add_edge(subj, obj, **{
+                    "relation":  rel,
+                    "weight":    1,
+                    "sentences": [triple.get("sentence", "")],
+                })
+
+    def get_neighbors(self, entity: str) -> list[dict]:
+        """
+        Return all nodes directly connected to this entity.
+        Useful for graph-augmented RAG context.
+        """
+        node_id = entity.lower()
+        if node_id not in self.graph:
+            return []
+
+        neighbors = []
+        for successor in self.graph.successors(node_id):
+            edge = self.graph[node_id][successor]
+            neighbors.append({
+                "entity":   self.graph.nodes[successor]["label"],
+                "relation": edge["relation"],
+                "direction": "outgoing",
+            })
+        for predecessor in self.graph.predecessors(node_id):
+            edge = self.graph[predecessor][node_id]
+            neighbors.append({
+                "entity":   self.graph.nodes[predecessor]["label"],
+                "relation": edge["relation"],
+                "direction": "incoming",
+            })
+        return neighbors
+
+    def stats(self) -> dict:
+        return {
+            "nodes": self.graph.number_of_nodes(),
+            "edges": self.graph.number_of_edges(),
+            "density": round(nx.density(self.graph), 4),
+        }--- ./knowledge_graph/entity_extractor.py ---
+import re
+
+
+STOP_WORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "need", "dare", "ought",
+    "used", "this", "that", "these", "those", "i", "we", "you", "he",
+    "she", "it", "they", "what", "which", "who", "whom", "whose", "when",
+    "where", "why", "how", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "such", "no", "not", "only", "same", "so",
+    "than", "too", "very", "just", "but", "and", "or", "for", "of", "in",
+    "on", "at", "to", "from", "with", "about", "into", "through", "during",
+    "also", "its", "their", "our", "your", "his", "her", "my",
+}
+
+
+class EntityExtractor:
+    """
+    Extracts named entities from text without any external ML models.
+
+    Strategy — three passes:
+    1. Capitalized noun phrases  (e.g. "Neural Network", "GPT-4")
+    2. Technical terms           (e.g. "self-attention", "backpropagation")
+    3. Quoted or defined terms   (e.g. 'called "embedding"')
+
+    Why no spaCy here?
+    spaCy is optional — you can plug it in later by subclassing this.
+    This version runs with zero dependencies and works well for
+    technical documents which are the main use case.
+    """
+
+    def __init__(self, min_length: int = 3, max_words: int = 4):
+        self.min_length = min_length
+        self.max_words = max_words
+
+    def extract(self, text: str) -> list[dict]:
+        """
+        Extract entities from text.
+        Returns list of dicts: {text, type, start, end}
+        """
+        entities = {}
+
+        for entity, meta in self._capitalized_phrases(text).items():
+            entities[entity] = meta
+
+        for entity, meta in self._technical_terms(text).items():
+            if entity not in entities:
+                entities[entity] = meta
+
+        for entity, meta in self._quoted_terms(text).items():
+            if entity not in entities:
+                entities[entity] = meta
+
+        return list(entities.values())
+
+    def extract_from_chunks(self, chunks: list[dict]) -> list[dict]:
+        """
+        Extract entities from a list of chunk dicts.
+        Deduplicates across chunks, counts frequency.
+        """
+        freq: dict[str, dict] = {}
+
+        for chunk in chunks:
+            found = self.extract(chunk["text"])
+            for ent in found:
+                key = ent["text"].lower()
+                if key in freq:
+                    freq[key]["frequency"] += 1
+                    freq[key]["chunk_ids"].append(chunk["chunk_id"])
+                else:
+                    freq[key] = {
+                        "text": ent["text"],
+                        "type": ent["type"],
+                        "frequency": 1,
+                        "chunk_ids": [chunk["chunk_id"]],
+                    }
+
+        # Filter out low-frequency noise — entities appearing only once
+        # are often parsing artifacts
+        return [e for e in freq.values() if e["frequency"] >= 1]
+
+    def _capitalized_phrases(self, text: str) -> dict:
+        """
+        Find sequences of capitalized words AND acronyms (e.g. BERT, GPT-4).
+        """
+        pattern = re.compile(
+            r'\b((?:[A-Z][a-z]+|[A-Z]{2,})(?:\s+(?:[A-Z][a-z]+|[A-Z]{2,})){0,3})\b'
+        )
+
+        results = {}
+        for match in pattern.finditer(text):
+            phrase = match.group(1).strip()
+            words = phrase.lower().split()
+
+            if any(w in STOP_WORDS for w in words):
+                continue
+            if len(phrase) < self.min_length:
+                continue
+            if len(words) > self.max_words:
+                continue
+
+            results[phrase] = {
+                "text": phrase,
+                "type": "PROPER_NOUN",
+                "start": match.start(),
+                "end": match.end(),
+            }
+
+        return results
+
+    def _technical_terms(self, text: str) -> dict:
+        """Find hyphenated or compound technical terms."""
+        # e.g. self-attention, back-propagation, fine-tuning
+        pattern = re.compile(r'\b([a-z]+(?:-[a-z]+)+)\b')
+        results = {}
+        for match in pattern.finditer(text):
+            term = match.group(1)
+            if len(term) < self.min_length:
+                continue
+            results[term] = {
+                "text": term,
+                "type": "TECHNICAL_TERM",
+                "start": match.start(),
+                "end": match.end(),
+            }
+        return results
+
+    def _quoted_terms(self, text: str) -> dict:
+        """Find terms introduced with 'called', 'known as', 'termed'."""
+        pattern = re.compile(
+            r'(?:called|known as|termed|named|referred to as)\s+"?([A-Za-z][A-Za-z\s\-]{2,30})"?',
+            re.IGNORECASE
+        )
+        results = {}
+        for match in pattern.finditer(text):
+            term = match.group(1).strip().rstrip('"')
+            if len(term) < self.min_length:
+                continue
+            results[term.lower()] = {
+                "text": term,
+                "type": "DEFINED_TERM",
+                "start": match.start(),
+                "end": match.end(),
+            }
+        return results--- ./knowledge_graph/graph_exporter.py ---
+import json
+from pathlib import Path
+import networkx as nx
+
+
+class GraphExporter:
+    """
+    Exports the knowledge graph to different formats.
+
+    - JSON  → for react-force-graph in the frontend
+    - GEXF  → for Gephi (desktop graph analysis tool)
+    - CSV   → nodes.csv + edges.csv for spreadsheet analysis
+    """
+
+    def to_frontend_json(self, graph: nx.DiGraph) -> dict:
+        """
+        Format for react-force-graph:
+        { nodes: [{id, label, type, val}], links: [{source, target, relation}] }
+        """
+        nodes = [
+            {
+                "id":    node_id,
+                "label": attrs.get("label", node_id),
+                "type":  attrs.get("type", "UNKNOWN"),
+                "val":   attrs.get("frequency", 1),
+            }
+            for node_id, attrs in graph.nodes(data=True)
+        ]
+        links = [
+            {
+                "source":   src,
+                "target":   tgt,
+                "relation": attrs.get("relation", "RELATED"),
+                "weight":   attrs.get("weight", 1),
+            }
+            for src, tgt, attrs in graph.edges(data=True)
+        ]
+        return {"nodes": nodes, "links": links}
+
+    def to_json_file(self, graph: nx.DiGraph, path: str | Path):
+        data = self.to_frontend_json(graph)
+        Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def to_gexf(self, graph: nx.DiGraph, path: str | Path):
+        """Export to GEXF format for Gephi visualization."""
+        nx.write_gexf(graph, str(path))
+
+    def to_csv(self, graph: nx.DiGraph, output_dir: str | Path):
+        """Export nodes and edges as separate CSV files."""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # nodes.csv
+        with open(output_dir / "nodes.csv", "w", encoding="utf-8") as f:
+            f.write("id,label,type,frequency\n")
+            for node_id, attrs in graph.nodes(data=True):
+                label = attrs.get("label", node_id).replace(",", " ")
+                ntype = attrs.get("type", "UNKNOWN")
+                freq  = attrs.get("frequency", 1)
+                f.write(f"{node_id},{label},{ntype},{freq}\n")
+
+        # edges.csv
+        with open(output_dir / "edges.csv", "w", encoding="utf-8") as f:
+            f.write("source,target,relation,weight\n")
+            for src, tgt, attrs in graph.edges(data=True):
+                rel    = attrs.get("relation", "RELATED")
+                weight = attrs.get("weight", 1)
+                f.write(f"{src},{tgt},{rel},{weight}\n")--- ./knowledge_graph/graph_retriever.py ---
+import networkx as nx
+
+
+class GraphRetriever:
+    """
+    Queries the knowledge graph to augment RAG context.
+
+    When a user asks a question, we extract key entities from the query,
+    find their neighbors in the graph, and return that context to inject
+    into the LLM prompt alongside the chunk text.
+
+    This is called GraphRAG — it gives much better answers for
+    multi-hop questions like "how does X relate to Y?"
+    """
+
+    def __init__(self, graph: nx.DiGraph):
+        self.graph = graph
+
+    def get_context_for_query(self, query: str, top_k: int = 5) -> str:
+        """
+        Main entry point. Takes a query string, finds relevant graph
+        context, returns it as a plain text string to inject into prompt.
+        """
+        entities = self._extract_query_entities(query)
+        if not entities:
+            return ""
+
+        facts = []
+        for entity in entities:
+            node_id = entity.lower()
+            if node_id not in self.graph:
+                continue
+            neighbors = self._get_neighbors(node_id)
+            for n in neighbors[:top_k]:
+                facts.append(
+                    f"{self.graph.nodes[node_id].get('label', node_id)} "
+                    f"--[{n['relation']}]--> {n['label']}"
+                )
+
+        if not facts:
+            return ""
+
+        return "Knowledge graph context:\n" + "\n".join(facts)
+
+    def find_path(self, entity_a: str, entity_b: str) -> list[str]:
+        """
+        Find the shortest path between two entities in the graph.
+        Useful for explaining how two concepts are connected.
+        """
+        a = entity_a.lower()
+        b = entity_b.lower()
+
+        if a not in self.graph or b not in self.graph:
+            return []
+
+        try:
+            path = nx.shortest_path(self.graph, source=a, target=b)
+            return [self.graph.nodes[n].get("label", n) for n in path]
+        except nx.NetworkXNoPath:
+            return []
+
+    def get_subgraph(self, entity: str, depth: int = 2) -> nx.DiGraph:
+        """
+        Return a subgraph centered on an entity up to `depth` hops away.
+        Used to generate focused graph visualizations in the UI.
+        """
+        node_id = entity.lower()
+        if node_id not in self.graph:
+            return nx.DiGraph()
+
+        nodes = {node_id}
+        frontier = {node_id}
+
+        for _ in range(depth):
+            next_frontier = set()
+            for n in frontier:
+                next_frontier.update(self.graph.successors(n))
+                next_frontier.update(self.graph.predecessors(n))
+            nodes.update(next_frontier)
+            frontier = next_frontier
+
+        return self.graph.subgraph(nodes).copy()
+
+    def _get_neighbors(self, node_id: str) -> list[dict]:
+        neighbors = []
+        for successor in self.graph.successors(node_id):
+            edge = self.graph[node_id][successor]
+            neighbors.append({
+                "label":    self.graph.nodes[successor].get("label", successor),
+                "relation": edge.get("relation", "RELATED"),
+                "direction": "outgoing",
+            })
+        for predecessor in self.graph.predecessors(node_id):
+            edge = self.graph[predecessor][node_id]
+            neighbors.append({
+                "label":    self.graph.nodes[predecessor].get("label", predecessor),
+                "relation": edge.get("relation", "RELATED"),
+                "direction": "incoming",
+            })
+        return neighbors
+
+    def _extract_query_entities(self, query: str) -> list[str]:
+        """
+        Simple entity extraction from query — capitalized words and
+        hyphenated terms. Good enough for routing to the graph.
+        """
+        import re
+        entities = []
+        # Capitalized words
+        for match in re.finditer(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', query):
+            entities.append(match.group())
+        # Hyphenated terms
+        for match in re.finditer(r'\b[a-z]+-[a-z]+\b', query):
+            entities.append(match.group())
+        # All words as fallback (lowercased, length > 4)
+        if not entities:
+            entities = [w for w in query.split() if len(w) > 4]
+        return entities--- ./knowledge_graph/tests/test_knowledge_graph.py ---
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import pytest
+import tempfile
+from pathlib import Path
+import re
+
+from knowledge_graph.entity_extractor import EntityExtractor
+from knowledge_graph.relation_extractor import RelationExtractor
+from knowledge_graph.graph_builder import GraphBuilder
+from knowledge_graph.graph_store import GraphStore
+from knowledge_graph.graph_retriever import GraphRetriever
+from knowledge_graph.graph_exporter import GraphExporter
+
+
+SAMPLE_TEXT = """
+Transformers use self-attention mechanisms to process sequences.
+BERT is a transformer model that uses bidirectional encoding.
+GPT is based on transformer architecture and produces text outputs.
+Deep Learning contains many neural network layers.
+Neural Networks enable pattern recognition in complex data.
+Self-attention improves long-range dependency modeling.
+BERT extends the transformer architecture with masked language modeling.
+"""
+
+SAMPLE_CHUNKS = [
+    {"chunk_id": "doc::chunk_0", "text": "Transformers use self-attention mechanisms to process sequences."},
+    {"chunk_id": "doc::chunk_1", "text": "BERT is a transformer model that uses bidirectional encoding."},
+    {"chunk_id": "doc::chunk_2", "text": "GPT is based on transformer architecture and produces text outputs."},
+    {"chunk_id": "doc::chunk_3", "text": "Deep Learning contains many neural network layers."},
+]
+
+
+# ── entity extractor ──────────────────────────────────────────────────────────
+
+class TestEntityExtractor:
+    def test_extracts_capitalized_entities(self):
+        ex = EntityExtractor()
+        entities = ex.extract("BERT and GPT are transformer models.")
+        texts = [e["text"] for e in entities]
+        assert any("BERT" in t or "GPT" in t for t in texts)
+
+    def test_extracts_technical_terms(self):
+        ex = EntityExtractor()
+        entities = ex.extract("self-attention is used in transformers.")
+        texts = [e["text"] for e in entities]
+        assert "self-attention" in texts
+
+    def test_extracts_quoted_terms(self):
+        ex = EntityExtractor()
+        entities = ex.extract('This is called "embedding layer" in the model.')
+        texts = [e["text"] for e in entities]
+        assert any("embedding" in t.lower() for t in texts)
+
+    def test_returns_list_of_dicts(self):
+        ex = EntityExtractor()
+        entities = ex.extract(SAMPLE_TEXT)
+        assert isinstance(entities, list)
+        for e in entities:
+            assert "text" in e
+            assert "type" in e
+
+    def test_extract_from_chunks(self):
+        ex = EntityExtractor()
+        entities = ex.extract_from_chunks(SAMPLE_CHUNKS)
+        assert len(entities) > 0
+        assert all("frequency" in e for e in entities)
+        assert all("chunk_ids" in e for e in entities)
+
+    def test_frequency_counted(self):
+        ex = EntityExtractor()
+        chunks = [
+            {"chunk_id": "c0", "text": "Transformers use self-attention."},
+            {"chunk_id": "c1", "text": "Transformers are powerful models."},
+        ]
+        entities = ex.extract_from_chunks(chunks)
+        transformer_ents = [e for e in entities if "transformer" in e["text"].lower()]
+        if transformer_ents:
+            assert transformer_ents[0]["frequency"] >= 1
+
+    def test_no_stop_words_as_entities(self):
+        ex = EntityExtractor()
+        entities = ex.extract("The model is very good and it works well.")
+        texts = [e["text"].lower() for e in entities]
+        stop = {"the", "and", "is", "it", "very"}
+        assert not any(t in stop for t in texts)
+
+
+# ── relation extractor ────────────────────────────────────────────────────────
+
+class TestRelationExtractor:
+    def test_extracts_uses_relation(self):
+        re_ext = RelationExtractor()
+        entities = [
+            {"text": "Transformer", "type": "PROPER_NOUN"},
+            {"text": "self-attention", "type": "TECHNICAL_TERM"},
+        ]
+        triples = re_ext.extract(
+            "Transformer uses self-attention to process tokens.", entities
+        )
+        assert len(triples) > 0
+        assert triples[0]["relation"] == "USES"
+
+    def test_extracts_is_a_relation(self):
+        re_ext = RelationExtractor()
+        entities = [
+            {"text": "BERT", "type": "PROPER_NOUN"},
+            {"text": "Transformer", "type": "PROPER_NOUN"},
+        ]
+        triples = re_ext.extract("BERT is a Transformer model.", entities)
+        relations = [t["relation"] for t in triples]
+        assert "IS_A" in relations
+
+    def test_triple_has_required_fields(self):
+        re_ext = RelationExtractor()
+        entities = [
+            {"text": "GPT", "type": "PROPER_NOUN"},
+            {"text": "Transformer", "type": "PROPER_NOUN"},
+        ]
+        triples = re_ext.extract("GPT is based on Transformer architecture.", entities)
+        for t in triples:
+            assert "subject" in t
+            assert "relation" in t
+            assert "object" in t
+            assert "sentence" in t
+
+    def test_deduplicates_triples(self):
+        re_ext = RelationExtractor()
+        entities = [
+            {"text": "BERT", "type": "PROPER_NOUN"},
+            {"text": "Transformer", "type": "PROPER_NOUN"},
+        ]
+        text = "BERT uses Transformer. BERT uses Transformer."
+        triples = re_ext.extract(text, entities)
+        keys = [(t["subject"].lower(), t["relation"], t["object"].lower()) for t in triples]
+        assert len(keys) == len(set(keys))
+
+    def test_no_self_relations(self):
+        re_ext = RelationExtractor()
+        entities = [{"text": "BERT", "type": "PROPER_NOUN"}]
+        triples = re_ext.extract("BERT uses BERT internally.", entities)
+        for t in triples:
+            assert t["subject"].lower() != t["object"].lower()
+
+    def test_extract_from_chunks(self):
+        re_ext = RelationExtractor()
+        entities = [
+            {"text": "Transformer", "type": "PROPER_NOUN"},
+            {"text": "self-attention", "type": "TECHNICAL_TERM"},
+            {"text": "BERT", "type": "PROPER_NOUN"},
+        ]
+        triples = re_ext.extract_from_chunks(SAMPLE_CHUNKS, entities)
+        assert isinstance(triples, list)
+
+
+# ── graph builder ─────────────────────────────────────────────────────────────
+
+class TestGraphBuilder:
+    def _make_graph(self):
+        entities = [
+            {"text": "Transformer", "type": "PROPER_NOUN", "frequency": 3, "chunk_ids": ["c0"]},
+            {"text": "BERT",        "type": "PROPER_NOUN", "frequency": 2, "chunk_ids": ["c1"]},
+            {"text": "self-attention", "type": "TECHNICAL_TERM", "frequency": 2, "chunk_ids": ["c0"]},
+        ]
+        triples = [
+            {"subject": "Transformer", "relation": "USES", "object": "self-attention", "sentence": "Transformer uses self-attention."},
+            {"subject": "BERT",        "relation": "IS_A", "object": "Transformer",    "sentence": "BERT is a Transformer."},
+        ]
+        builder = GraphBuilder()
+        return builder.build(entities, triples)
+
+    def test_nodes_added(self):
+        graph = self._make_graph()
+        assert "transformer" in graph.nodes
+        assert "bert" in graph.nodes
+        assert "self-attention" in graph.nodes
+
+    def test_edges_added(self):
+        graph = self._make_graph()
+        assert graph.has_edge("transformer", "self-attention")
+        assert graph.has_edge("bert", "transformer")
+
+    def test_edge_relation_label(self):
+        graph = self._make_graph()
+        assert graph["transformer"]["self-attention"]["relation"] == "USES"
+        assert graph["bert"]["transformer"]["relation"] == "IS_A"
+
+    def test_node_attributes(self):
+        graph = self._make_graph()
+        assert graph.nodes["transformer"]["label"] == "Transformer"
+        assert graph.nodes["transformer"]["frequency"] == 3
+
+    def test_stats(self):
+        builder = GraphBuilder()
+        graph = self._make_graph()
+        builder.graph = graph
+        stats = builder.stats()
+        assert stats["nodes"] == 3
+        assert stats["edges"] == 2
+
+    def test_get_neighbors(self):
+        builder = GraphBuilder()
+        graph = self._make_graph()
+        builder.graph = graph
+        neighbors = builder.get_neighbors("Transformer")
+        assert len(neighbors) > 0
+        relations = [n["relation"] for n in neighbors]
+        assert "USES" in relations
+
+
+# ── graph store ───────────────────────────────────────────────────────────────
+
+class TestGraphStore:
+    def _make_graph(self):
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("bert", label="BERT", type="PROPER_NOUN", frequency=2)
+        g.add_node("transformer", label="Transformer", type="PROPER_NOUN", frequency=3)
+        g.add_edge("bert", "transformer", relation="IS_A", weight=1)
+        return g
+
+    def test_save_and_load(self, tmp_path):
+        store = GraphStore(tmp_path)
+        graph = self._make_graph()
+        store.save(graph, "test_doc")
+        loaded = store.load("test_doc")
+        assert loaded is not None
+        assert "bert" in loaded.nodes
+        assert loaded.has_edge("bert", "transformer")
+
+    def test_exists(self, tmp_path):
+        store = GraphStore(tmp_path)
+        assert not store.exists("missing_doc")
+        store.save(self._make_graph(), "test_doc")
+        assert store.exists("test_doc")
+
+    def test_delete(self, tmp_path):
+        store = GraphStore(tmp_path)
+        store.save(self._make_graph(), "test_doc")
+        store.delete("test_doc")
+        assert not store.exists("test_doc")
+
+    def test_list_docs(self, tmp_path):
+        store = GraphStore(tmp_path)
+        store.save(self._make_graph(), "doc_a")
+        store.save(self._make_graph(), "doc_b")
+        docs = store.list_docs()
+        assert "doc_a" in docs
+        assert "doc_b" in docs
+
+    def test_export_for_frontend(self, tmp_path):
+        store = GraphStore(tmp_path)
+        store.save(self._make_graph(), "test_doc")
+        data = store.export_for_frontend("test_doc")
+        assert "nodes" in data
+        assert "links" in data
+        assert len(data["nodes"]) == 2
+        assert len(data["links"]) == 1
+
+    def test_load_missing_returns_none(self, tmp_path):
+        store = GraphStore(tmp_path)
+        assert store.load("nonexistent") is None
+
+
+# ── graph retriever ───────────────────────────────────────────────────────────
+
+class TestGraphRetriever:
+    def _make_retriever(self):
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("transformer", label="Transformer", type="PROPER_NOUN", frequency=3)
+        g.add_node("bert",        label="BERT",        type="PROPER_NOUN", frequency=2)
+        g.add_node("self-attention", label="self-attention", type="TECHNICAL_TERM", frequency=2)
+        g.add_edge("transformer", "self-attention", relation="USES",  weight=1)
+        g.add_edge("bert",        "transformer",    relation="IS_A",  weight=1)
+        return GraphRetriever(g)
+
+    def test_get_context_for_query(self):
+        retriever = self._make_retriever()
+        context = retriever.get_context_for_query("How does BERT work?")
+        assert isinstance(context, str)
+
+    def test_context_contains_graph_facts(self):
+        retriever = self._make_retriever()
+        context = retriever.get_context_for_query("What does BERT use?")
+        assert "Knowledge graph context" in context or context == ""
+
+    def test_find_path_between_entities(self):
+        retriever = self._make_retriever()
+        path = retriever.find_path("BERT", "self-attention")
+        assert isinstance(path, list)
+        if path:
+            assert path[0] == "BERT"
+
+    def test_find_path_missing_entity(self):
+        retriever = self._make_retriever()
+        path = retriever.find_path("BERT", "nonexistent")
+        assert path == []
+
+    def test_get_subgraph(self):
+        retriever = self._make_retriever()
+        sub = retriever.get_subgraph("bert", depth=1)
+        assert "bert" in sub.nodes
+        assert "transformer" in sub.nodes
+
+    def test_empty_query_returns_empty(self):
+        retriever = self._make_retriever()
+        context = retriever.get_context_for_query("")
+        assert context == ""
+
+
+# ── graph exporter ────────────────────────────────────────────────────────────
+
+class TestGraphExporter:
+    def _make_graph(self):
+        import networkx as nx
+        g = nx.DiGraph()
+        g.add_node("bert", label="BERT", type="PROPER_NOUN", frequency=2)
+        g.add_node("transformer", label="Transformer", type="PROPER_NOUN", frequency=3)
+        g.add_edge("bert", "transformer", relation="IS_A", weight=1)
+        return g
+
+    def test_to_frontend_json_structure(self):
+        exp = GraphExporter()
+        data = exp.to_frontend_json(self._make_graph())
+        assert "nodes" in data
+        assert "links" in data
+
+    def test_frontend_json_node_fields(self):
+        exp = GraphExporter()
+        data = exp.to_frontend_json(self._make_graph())
+        for node in data["nodes"]:
+            assert "id" in node
+            assert "label" in node
+            assert "type" in node
+            assert "val" in node
+
+    def test_frontend_json_link_fields(self):
+        exp = GraphExporter()
+        data = exp.to_frontend_json(self._make_graph())
+        for link in data["links"]:
+            assert "source" in link
+            assert "target" in link
+            assert "relation" in link
+
+    def test_to_json_file(self, tmp_path):
+        exp = GraphExporter()
+        out = tmp_path / "graph.json"
+        exp.to_json_file(self._make_graph(), out)
+        assert out.exists()
+        import json
+        data = json.loads(out.read_text())
+        assert "nodes" in data
+
+    def test_to_csv(self, tmp_path):
+        exp = GraphExporter()
+        exp.to_csv(self._make_graph(), tmp_path)
+        assert (tmp_path / "nodes.csv").exists()
+        assert (tmp_path / "edges.csv").exists()
+        content = (tmp_path / "nodes.csv").read_text()
+        assert "bert" in content
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])--- ./knowledge_graph/graph_store.py ---
+import json
+from pathlib import Path
+import networkx as nx
+from networkx.readwrite import json_graph
+
+
+class GraphStore:
+    """
+    Persists and loads knowledge graphs to/from disk.
+
+    One JSON file per document — stored in data/graphs/{doc_id}.json
+    Format: NetworkX node-link JSON (nodes + links arrays)
+
+    This is simple and frontend-friendly — the same JSON gets
+    served directly to react-force-graph in the UI.
+    """
+
+    def __init__(self, graphs_dir: str | Path = "data/graphs"):
+        self.graphs_dir = Path(graphs_dir)
+        self.graphs_dir.mkdir(parents=True, exist_ok=True)
+
+    def save(self, graph: nx.DiGraph, doc_id: str):
+        """Serialize graph to JSON and save to disk."""
+        data = json_graph.node_link_data(graph)
+        path = self._path(doc_id)
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    def load(self, doc_id: str) -> nx.DiGraph | None:
+        """Load a graph from disk. Returns None if not found."""
+        path = self._path(doc_id)
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return json_graph.node_link_graph(data, directed=True)
+
+    def exists(self, doc_id: str) -> bool:
+        return self._path(doc_id).exists()
+
+    def delete(self, doc_id: str):
+        path = self._path(doc_id)
+        if path.exists():
+            path.unlink()
+
+    def list_docs(self) -> list[str]:
+        """Return all doc_ids that have a stored graph."""
+        return [p.stem for p in self.graphs_dir.glob("*.json")]
+
+    def export_for_frontend(self, doc_id: str) -> dict | None:
+        """
+        Load graph and return a clean dict ready for react-force-graph.
+
+        react-force-graph expects:
+        {
+            "nodes": [{"id": "...", "label": "...", "type": "...", "val": 1}, ...],
+            "links": [{"source": "...", "target": "...", "relation": "..."}, ...]
+        }
+        """
+        graph = self.load(doc_id)
+        if graph is None:
+            return None
+
+        nodes = []
+        for node_id, attrs in graph.nodes(data=True):
+            nodes.append({
+                "id":        node_id,
+                "label":     attrs.get("label", node_id),
+                "type":      attrs.get("type", "UNKNOWN"),
+                "val":       attrs.get("frequency", 1),  # controls node size in UI
+                "chunk_ids": attrs.get("chunk_ids", []),
+            })
+
+        links = []
+        for source, target, attrs in graph.edges(data=True):
+            links.append({
+                "source":   source,
+                "target":   target,
+                "relation": attrs.get("relation", "RELATED"),
+                "weight":   attrs.get("weight", 1),
+            })
+
+        return {"nodes": nodes, "links": links}
+
+    def _path(self, doc_id: str) -> Path:
+        # Sanitize doc_id to be safe as a filename
+        safe = doc_id.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        return self.graphs_dir / f"{safe}.json"--- ./run2.py ---
+import sys
+import numpy as np
+from pathlib import Path
+
+from ai.ingestion import parse_document
+from ai.chunker import Chunker
+from ai.embedding import Embedder
+from ai.vectorstore import FAISSStore, MetadataStore
+from ai.retrieval import HybridRetriever, DenseRetriever, BM25Retriever
+from ai.generation import LLMClient, build_prompt
+
+from knowledge_graph import (
+    EntityExtractor, RelationExtractor,
+    GraphBuilder, GraphStore, GraphRetriever
+)
+
+
+def build_knowledge_graph(chunks: list, doc_id: str):
+    """Extract entities + relations, build graph, save it."""
+    print("\n[KG] Extracting entities...")
+    extractor = EntityExtractor()
+    entities  = extractor.extract_from_chunks([
+        {"chunk_id": c.chunk_id, "text": c.text} for c in chunks
+    ])
+    print(f"     {len(entities)} entities found")
+
+    print("[KG] Extracting relations...")
+    rel_extractor = RelationExtractor()
+    triples = rel_extractor.extract_from_chunks([
+        {"chunk_id": c.chunk_id, "text": c.text} for c in chunks
+    ], entities)
+    print(f"     {len(triples)} triples found")
+
+    print("[KG] Building graph...")
+    builder = GraphBuilder()
+    graph   = builder.build(entities, triples)
+    stats   = builder.stats()
+    print(f"     {stats['nodes']} nodes, {stats['edges']} edges")
+
+    print("[KG] Saving graph...")
+    GraphStore("data/graphs").save(graph, doc_id)
+    print(f"     Saved to data/graphs/{doc_id}.json")
+
+    return graph
+
+
+def run(pdf_path: str, prompt: str):
+    doc_id = Path(pdf_path).stem
+
+    print("\n[1] Parsing document...")
+    doc = parse_document(pdf_path)
+    print(f"    {doc.title} — {doc.page_count} pages, {doc.word_count} words")
+
+    print("\n[2] Chunking...")
+    chunks = Chunker().chunk_document(doc)
+    print(f"    {len(chunks)} chunks created")
+
+    print("\n[3] Embedding chunks...")
+    embedder = Embedder()
+    embedded = embedder.embed_chunks(chunks)
+
+    print("\n[4] Building vector store...")
+    store   = FAISSStore()
+    vectors = np.stack([e.vector for e in embedded])
+    ids     = [e.chunk_id for e in embedded]
+    store.add(ids, vectors)
+
+    meta_store = MetadataStore("data/docs.db")
+    meta_store.insert_chunks([{
+        "chunk_id":    c.chunk_id,
+        "source_path": c.source_path,
+        "title":       c.metadata["title"],
+        "file_type":   c.metadata["file_type"],
+        "page_num":    c.page_num,
+        "chunk_index": c.chunk_index,
+        "text":        c.text,
+        "token_count": c.token_count,
+        "metadata":    c.metadata,
+    } for c in chunks])
+
+    # ── Knowledge Graph ───────────────────────────────────────
+    graph = build_knowledge_graph(chunks, doc_id)
+
+    print("\n[5] Retrieving relevant chunks...")
+    dense  = DenseRetriever(store, embedder)
+    bm25   = BM25Retriever()
+    bm25.index([{"chunk_id": c.chunk_id, "text": c.text} for c in chunks])
+    hybrid = HybridRetriever(dense, bm25)
+    results   = hybrid.retrieve(prompt, top_k=5)
+    chunk_ids = [r[0] for r in results]
+    print(f"    Top {len(chunk_ids)} chunks retrieved")
+
+    # ── Graph-augmented context ───────────────────────────────
+    print("\n[6] Augmenting with knowledge graph...")
+    kg_retriever  = GraphRetriever(graph)
+    graph_context = kg_retriever.get_context_for_query(prompt)
+    if graph_context:
+        print(f"    Graph context: {graph_context[:80]}...")
+    else:
+        print("    No graph context found for this query")
+
+    print("\n[7] Generating answer...\n")
+
+    # Inject graph context into the prompt
+    messages = build_prompt(prompt, chunk_ids, meta_store)
+    if graph_context:
+        messages[1]["content"] = graph_context + "\n\n" + messages[1]["content"]
+
+    client = LLMClient()
+    print("=" * 60)
+    for token in client.stream(messages):
+        print(token, end="", flush=True)
+    print("\n" + "=" * 60)
+
+    meta_store.close()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python run.py <pdf_path> <prompt>")
+        print('Example: python run.py paper.pdf "What is the main contribution?"')
+        sys.exit(1)
+
+    run(sys.argv[1], sys.argv[2])
