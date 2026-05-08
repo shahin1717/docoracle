@@ -14,3 +14,10 @@ backedn/api/__pycache__
 backedn/auth/__pycache__
 data/__pycache__
 knowledge_graphs/__pycache__
+data/graphs/
+data/uploads/
+data/app.db
+data/docs.db
+.env
+.venv/
+*.pdf
