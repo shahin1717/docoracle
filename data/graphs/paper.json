@@ -1,0 +1,1944 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "Page",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "page"
+    },
+    {
+      "label": "Logic",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "logic"
+    },
+    {
+      "label": "Search",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "search"
+    },
+    {
+      "label": "Planning",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "planning"
+    },
+    {
+      "label": "Expert",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "expert"
+    },
+    {
+      "label": "Probability",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "probability"
+    },
+    {
+      "label": "Machine",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "machine"
+    },
+    {
+      "label": "Robotics",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "robotics"
+    },
+    {
+      "label": "Natural",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "natural"
+    },
+    {
+      "label": "AI\nGenerative AI",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "ai\ngenerative ai"
+    },
+    {
+      "label": "Examples",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_2"
+      ],
+      "id": "examples"
+    },
+    {
+      "label": "Chess",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "chess"
+    },
+    {
+      "label": "Medical",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "medical"
+    },
+    {
+      "label": "Route",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "route"
+    },
+    {
+      "label": "Google Maps",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "google maps"
+    },
+    {
+      "label": "Spam",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "spam"
+    },
+    {
+      "label": "Self",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "self"
+    },
+    {
+      "label": "Decision",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "decision"
+    },
+    {
+      "label": "Generating",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "generating"
+    },
+    {
+      "label": "Image",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "image"
+    },
+    {
+      "label": "Code",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "code"
+    },
+    {
+      "label": "Machine Learning",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "machine learning"
+    },
+    {
+      "label": "Deep Learning",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "deep learning"
+    },
+    {
+      "label": "Generative AI",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "generative ai"
+    },
+    {
+      "label": "Earlier AI",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "earlier ai"
+    },
+    {
+      "label": "Symbolic",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "symbolic"
+    },
+    {
+      "label": "Rule",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "rule"
+    },
+    {
+      "label": "Logical\nNow AI",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "logical\nnow ai"
+    },
+    {
+      "label": "Statistical",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "statistical"
+    },
+    {
+      "label": "Data",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "data"
+    },
+    {
+      "label": "Logics",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "logics"
+    },
+    {
+      "label": "Based",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "based"
+    },
+    {
+      "label": "Systems\nArtificial Intelligence",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "systems\nartificial intelligence"
+    },
+    {
+      "label": "Propositional Logic",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "propositional logic"
+    },
+    {
+      "label": "Propositional",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "propositional"
+    },
+    {
+      "label": "Example",
+      "type": "PROPER_NOUN",
+      "frequency": 5,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1",
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "example"
+    },
+    {
+      "label": "Syntax",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "syntax"
+    },
+    {
+      "label": "Variables",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "variables"
+    },
+    {
+      "label": "Logical",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "logical"
+    },
+    {
+      "label": "IMPLIES",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "implies"
+    },
+    {
+      "label": "Truth Table",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "truth table"
+    },
+    {
+      "label": "Satisfiability",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "satisfiability"
+    },
+    {
+      "label": "Validity",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "validity"
+    },
+    {
+      "label": "Logical Formulas",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "logical formulas"
+    },
+    {
+      "label": "Role",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "role"
+    },
+    {
+      "label": "Applications",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "applications"
+    },
+    {
+      "label": "Basics",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "basics"
+    },
+    {
+      "label": "Reasoning",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "reasoning"
+    },
+    {
+      "label": "Statements",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_0",
+        "paper.pdf::chunk_1"
+      ],
+      "id": "statements"
+    },
+    {
+      "label": "image-only",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "image-only"
+    },
+    {
+      "label": "logic-based",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_0"
+      ],
+      "id": "logic-based"
+    },
+    {
+      "label": "Formula",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_1",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "formula"
+    },
+    {
+      "label": "Order Logic",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "order logic"
+    },
+    {
+      "label": "Whole",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "whole"
+    },
+    {
+      "label": "Exercise",
+      "type": "PROPER_NOUN",
+      "frequency": 4,
+      "chunk_ids": [
+        "paper.pdf::chunk_1",
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "exercise"
+    },
+    {
+      "label": "Write",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "write"
+    },
+    {
+      "label": "Solution",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_1",
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3"
+      ],
+      "id": "solution"
+    },
+    {
+      "label": "Truth Tables",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "truth tables"
+    },
+    {
+      "label": "Build",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "build"
+    },
+    {
+      "label": "Variables\nPredicates\nQuantifiers\nPredicate",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "variables\npredicates\nquantifiers\npredicate"
+    },
+    {
+      "label": "First",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "first"
+    },
+    {
+      "label": "Introduction",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "introduction"
+    },
+    {
+      "label": "Decision Making",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "decision making"
+    },
+    {
+      "label": "Practical Exercise",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "practical exercise"
+    },
+    {
+      "label": "Discuss",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "discuss"
+    },
+    {
+      "label": "Heuristics\nInstead",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "heuristics\ninstead"
+    },
+    {
+      "label": "Highest",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "highest"
+    },
+    {
+      "label": "Closest",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "closest"
+    },
+    {
+      "label": "Uncertainty",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_1",
+        "paper.pdf::chunk_2"
+      ],
+      "id": "uncertainty"
+    },
+    {
+      "label": "real-time",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_1"
+      ],
+      "id": "real-time"
+    },
+    {
+      "label": "Understanding Uncertainty",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "understanding uncertainty"
+    },
+    {
+      "label": "Give",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "give"
+    },
+    {
+      "label": "Autonomous",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "autonomous"
+    },
+    {
+      "label": "Random Variables",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "random variables"
+    },
+    {
+      "label": "Probability Distributions",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "probability distributions"
+    },
+    {
+      "label": "Conditional Probability",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "conditional probability"
+    },
+    {
+      "label": "Bayes",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "bayes"
+    },
+    {
+      "label": "Theorem",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3"
+      ],
+      "id": "theorem"
+    },
+    {
+      "label": "Given",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "given"
+    },
+    {
+      "label": "Rain",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "rain"
+    },
+    {
+      "label": "There",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "there"
+    },
+    {
+      "label": "Forecast",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "forecast"
+    },
+    {
+      "label": "Using Bayes",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3"
+      ],
+      "id": "using bayes"
+    },
+    {
+      "label": "Entropy",
+      "type": "PROPER_NOUN",
+      "frequency": 4,
+      "chunk_ids": [
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "entropy"
+    },
+    {
+      "label": "Higher",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_2",
+        "paper.pdf::chunk_3"
+      ],
+      "id": "higher"
+    },
+    {
+      "label": "self-driving",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "self-driving"
+    },
+    {
+      "label": "decision-making",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_2"
+      ],
+      "id": "decision-making"
+    },
+    {
+      "label": "Coin Toss",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "coin toss"
+    },
+    {
+      "label": "Calculate",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "calculate"
+    },
+    {
+      "label": "Since",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "since"
+    },
+    {
+      "label": "Problem",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "problem"
+    },
+    {
+      "label": "Consider",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "consider"
+    },
+    {
+      "label": "Information Gain",
+      "type": "PROPER_NOUN",
+      "frequency": 4,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "information gain"
+    },
+    {
+      "label": "Decision Trees\nInformation Gain",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "decision trees\ninformation gain"
+    },
+    {
+      "label": "Age",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "age"
+    },
+    {
+      "label": "Income",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "income"
+    },
+    {
+      "label": "Location",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "location"
+    },
+    {
+      "label": "Mammal",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "mammal"
+    },
+    {
+      "label": "Bird",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "bird"
+    },
+    {
+      "label": "Decision Trees",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "decision trees"
+    },
+    {
+      "label": "Decision Tree",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "decision tree"
+    },
+    {
+      "label": "Use",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "use"
+    },
+    {
+      "label": "Classification Problems",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "classification problems"
+    },
+    {
+      "label": "Classifying",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "classifying"
+    },
+    {
+      "label": "Regression Problems",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "regression problems"
+    },
+    {
+      "label": "Predicting",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_3",
+        "paper.pdf::chunk_4"
+      ],
+      "id": "predicting"
+    },
+    {
+      "label": "flowchart-like",
+      "type": "TECHNICAL_TERM",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_3"
+      ],
+      "id": "flowchart-like"
+    },
+    {
+      "label": "Create",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "create"
+    },
+    {
+      "label": "Weather",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "weather"
+    },
+    {
+      "label": "Sunny",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "sunny"
+    },
+    {
+      "label": "Rainy",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "rainy"
+    },
+    {
+      "label": "Overcast",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "overcast"
+    },
+    {
+      "label": "Humidity",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "humidity"
+    },
+    {
+      "label": "High",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "high"
+    },
+    {
+      "label": "Normal",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "normal"
+    },
+    {
+      "label": "Wind",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "wind"
+    },
+    {
+      "label": "Strong",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "strong"
+    },
+    {
+      "label": "Weak",
+      "type": "PROPER_NOUN",
+      "frequency": 3,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "weak"
+    },
+    {
+      "label": "Play Tennis",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "play tennis"
+    },
+    {
+      "label": "Yes",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "yes"
+    },
+    {
+      "label": "Don",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "don"
+    },
+    {
+      "label": "Play",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "play"
+    },
+    {
+      "label": "Decision \nTree",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "decision \ntree"
+    },
+    {
+      "label": "Information Gain Calculation Example",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "information gain calculation example"
+    },
+    {
+      "label": "Proportion",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "proportion"
+    },
+    {
+      "label": "Weighted",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "weighted"
+    },
+    {
+      "label": "Students",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "students"
+    },
+    {
+      "label": "Dataset",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "dataset"
+    },
+    {
+      "label": "Pass",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "pass"
+    },
+    {
+      "label": "Fail",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "fail"
+    },
+    {
+      "label": "Total",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "total"
+    },
+    {
+      "label": "Compute Entropy Before Split",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "compute entropy before split"
+    },
+    {
+      "label": "Maximum",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "maximum"
+    },
+    {
+      "label": "Feature",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "feature"
+    },
+    {
+      "label": "Studied",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "studied"
+    },
+    {
+      "label": "Group",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "group"
+    },
+    {
+      "label": "Compute Weighted Entropy After",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "compute weighted entropy after"
+    },
+    {
+      "label": "Compute Information Gain",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "compute information gain"
+    },
+    {
+      "label": "Entropy Formula",
+      "type": "PROPER_NOUN",
+      "frequency": 1,
+      "chunk_ids": [
+        "paper.pdf::chunk_4"
+      ],
+      "id": "entropy formula"
+    },
+    {
+      "label": "Suppose",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "suppose"
+    },
+    {
+      "label": "Compute Entropy",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "compute entropy"
+    },
+    {
+      "label": "Entire Dataset",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_4",
+        "paper.pdf::chunk_5"
+      ],
+      "id": "entire dataset"
+    },
+    {
+      "label": "Temperature",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "temperature"
+    },
+    {
+      "label": "Hot",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "hot"
+    },
+    {
+      "label": "Mild",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "mild"
+    },
+    {
+      "label": "Cool",
+      "type": "PROPER_NOUN",
+      "frequency": 2,
+      "chunk_ids": [
+        "paper.pdf::chunk_5",
+        "paper.pdf::chunk_6"
+      ],
+      "id": "cool"
+    }
+  ],
+  "edges": [
+    {
+      "relation": "ENABLES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Each proposition is a simple statement like \"It is raining\" or \"The ground \nis wet.\u201c\n\u2022Logical connectives allow combining simple statements to form more \ncomplex logical expressions."
+      ],
+      "source": "logic",
+      "target": "statements"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "logic",
+      "target": "logical"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "probability",
+      "target": "bayes"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "probability",
+      "target": "theorem"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "probability",
+      "target": "calculate"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "probability",
+      "target": "yes"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "examples",
+      "target": "machine"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "examples",
+      "target": "machine learning"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "image",
+      "target": "machine"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "image",
+      "target": "machine learning"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "code",
+      "target": "machine"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "code",
+      "target": "machine learning"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "propositional logic",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "propositional",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "example",
+      "target": "machine"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "example",
+      "target": "machine learning"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "example",
+      "target": "logical"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "example",
+      "target": "bayes"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "example",
+      "target": "theorem"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "example",
+      "target": "calculate"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "example",
+      "target": "yes"
+    },
+    {
+      "relation": "ENABLES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Each proposition is a simple statement like \"It is raining\" or \"The ground \nis wet.\u201c\n\u2022Logical connectives allow combining simple statements to form more \ncomplex logical expressions."
+      ],
+      "source": "logical",
+      "target": "statements"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "truth table",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "formula",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "exercise",
+      "target": "logical"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "decision"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "based"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "rain"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "decision tree"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "weather"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "sunny"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "rainy"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "play tennis"
+    },
+    {
+      "relation": "PRODUCES",
+      "weight": 1,
+      "sentences": [
+        "39\n\u25cf\nExercise: Create a simple decision tree to decide whether to play tennis \nbased on the weather conditions (sunny, rainy, etc.)."
+      ],
+      "source": "exercise",
+      "target": "play"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "write",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "solution",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "truth tables",
+      "target": "logical"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "give",
+      "target": "bayes"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "give",
+      "target": "theorem"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "give",
+      "target": "calculate"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "give",
+      "target": "yes"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "bayes",
+      "target": "rain"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "theorem",
+      "target": "rain"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "given",
+      "target": "bayes"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "given",
+      "target": "theorem"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "given",
+      "target": "calculate"
+    },
+    {
+      "relation": "USES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Example 1:\n\u2022If the probability of getting sick is 0.1, and the probability of \nshowing symptoms given that you\u2019re sick is 0.8, we can use \nBayes' Theorem to calculate the probability of being sick given \nthat symptoms are present."
+      ],
+      "source": "given",
+      "target": "yes"
+    },
+    {
+      "relation": "ENABLES",
+      "weight": 1,
+      "sentences": [
+        "\u2022Each proposition is a simple statement like \"It is raining\" or \"The ground \nis wet.\u201c\n\u2022Logical connectives allow combining simple statements to form more \ncomplex logical expressions."
+      ],
+      "source": "rain",
+      "target": "statements"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "Example:\n\u2022P = \u201cIt is raining\u201d\n\u2022Q = \u201cThe ground is wet\u201d\nYou can combine them:\n\u2022P\u2192Q\n\u2022P\u2227Q\n\u2022\u00acP\n\n17\n\u2022Exercise:\n\u2022Write a propositional logic formula for: \"If it is not raining and I am \nfree, I will go for a walk.\"\n\u2022Solution: (\u00acR \u2227F) \u2192 W, where:\n\u2022R = \"It is raining\"\n\u2022F = \"I am free\"\n\u2022W = \"I will go for a walk\"\n\n18\nTruth Tables\n\u2022A truth table is a systematic way of listing all possible truth values for a logical \nexpression."
+      ],
+      "source": "rain",
+      "target": "logical"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "The system can\u2019t be sure if there \nis a pedestrian, leading to uncertainty in decision-making."
+      ],
+      "source": "there",
+      "target": "decision"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "The system can\u2019t be sure if there \nis a pedestrian, leading to uncertainty in decision-making."
+      ],
+      "source": "there",
+      "target": "uncertainty"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "The system can\u2019t be sure if there \nis a pedestrian, leading to uncertainty in decision-making."
+      ],
+      "source": "there",
+      "target": "decision-making"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "there",
+      "target": "rain"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "forecast",
+      "target": "rain"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "using bayes",
+      "target": "rain"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "consider",
+      "target": "rain"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u2022Information Gain is a measure of how well a feature splits the dataset."
+      ],
+      "source": "information gain",
+      "target": "data"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u2022Information Gain is a measure of how well a feature splits the dataset."
+      ],
+      "source": "information gain",
+      "target": "dataset"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u2022Information Gain is a measure of how well a feature splits the dataset."
+      ],
+      "source": "information gain",
+      "target": "feature"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "age",
+      "target": "machine"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "7\nExamples:\n\u2022ChatGPT\n\u2022Image generation\n\u2022Code generation\nIt is a subset of Machine Learning, which is a subset of AI."
+      ],
+      "source": "age",
+      "target": "machine learning"
+    },
+    {
+      "relation": "IS_A",
+      "weight": 1,
+      "sentences": [
+        "\u25cf\nUsing Bayes' Theorem:\n\u25cf\nSo, after considering the forecast, there is a 48% chance that it will rain."
+      ],
+      "source": "yes",
+      "target": "rain"
+    }
+  ]
+}

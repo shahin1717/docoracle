@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # ── Ollama ────────────────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "mistral:7b-instruct-q4_0"
+    llm_model: str = "mistral:7b-instruct-q8_0"
     embed_model: str = "nomic-embed-text"
 
     # ── RAG ───────────────────────────────────────────────────────────────────
