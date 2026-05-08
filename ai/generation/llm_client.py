@@ -23,6 +23,11 @@ class LLMClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
+            "options": {
+            "temperature": 0.7,
+            "num_predict": 4096, 
+            "top_p": 0.9,
+        }
         }, timeout=120)
         response.raise_for_status()
         return response.json()["message"]["content"]
@@ -41,6 +46,11 @@ class LLMClient:
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "options": {
+            "temperature": 0.7,
+            "num_predict": 4096,  
+            "top_p": 0.9,
+        }
         }, stream=True, timeout=120)
         response.raise_for_status()
 

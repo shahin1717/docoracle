@@ -17,10 +17,15 @@ def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore
     context = "\n\n".join(context_parts)
 
     system_prompt = (
-        "You are a helpful assistant that answers questions based strictly on the provided context. "
-        "Always cite the source number [1], [2] etc. when using information from a chunk. "
-        "If the context does not contain enough information to answer, say so clearly. "
-        "Do not make up facts."
+        "You are a helpful expert assistant. "
+        "Use the provided context as your primary source. "
+        "You are given context extracted from a document. "
+        "Answer the question thoroughly and in detail using the context. "
+        "You may use your own knowledge to explain or clarify concepts from the context. "
+        "But not to hallucinate new facts. "
+        "Always cite [1], [2] etc. when directly referencing a chunk. "
+        "Give clear, complete answers."
+
     )
 
     user_message = f"Context:\n{context}\n\nQuestion: {query}"
