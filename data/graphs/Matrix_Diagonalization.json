@@ -25,14 +25,13 @@
       "id": "introduction to diagonalization"
     },
     {
-      "label": "Definition",
+      "label": "Similarity of matrices",
       "type": "SUBTOPIC",
       "frequency": 5,
       "chunk_ids": [
-        "Matrix Diagonalization.pdf::chunk_0",
-        "Matrix Diagonalization.pdf::chunk_1"
+        "Matrix Diagonalization.pdf::chunk_0"
       ],
-      "id": "definition"
+      "id": "similarity of matrices"
     },
     {
       "label": "Determinant",
@@ -53,7 +52,7 @@
       "id": "trace"
     },
     {
-      "label": "Diagonalization and Linear Applications",
+      "label": "Diagonalization and linear applications",
       "type": "MAIN_TOPIC",
       "frequency": 10,
       "chunk_ids": [
@@ -64,21 +63,7 @@
       "id": "diagonalization and linear applications"
     },
     {
-      "label": "Proposition 1",
-      "type": "SUBTOPIC",
-      "frequency": 5,
-      "chunk_ids": [],
-      "id": "proposition 1"
-    },
-    {
-      "label": "Proposition 2",
-      "type": "SUBTOPIC",
-      "frequency": 5,
-      "chunk_ids": [],
-      "id": "proposition 2"
-    },
-    {
-      "label": "Consequence",
+      "label": "Linear applications",
       "type": "SUBTOPIC",
       "frequency": 5,
       "chunk_ids": [
@@ -86,7 +71,21 @@
         "Matrix Diagonalization.pdf::chunk_1",
         "Matrix Diagonalization.pdf::chunk_2"
       ],
-      "id": "consequence"
+      "id": "linear applications"
+    },
+    {
+      "label": "Eigenvectors and eigenvalues",
+      "type": "SUBTOPIC",
+      "frequency": 5,
+      "chunk_ids": [],
+      "id": "eigenvectors and eigenvalues"
+    },
+    {
+      "label": "Associated eigen-spaces",
+      "type": "SUBTOPIC",
+      "frequency": 5,
+      "chunk_ids": [],
+      "id": "associated eigen-spaces"
     }
   ],
   "edges": [
@@ -103,7 +102,7 @@
       "relation": "CONTAINS",
       "weight": 1,
       "sentences": [
-        "Matrix Diagonalization contains Diagonalization and Linear Applications"
+        "Matrix Diagonalization contains Diagonalization and linear applications"
       ],
       "source": "matrix diagonalization",
       "target": "diagonalization and linear applications"
@@ -112,10 +111,10 @@
       "relation": "CONTAINS",
       "weight": 1,
       "sentences": [
-        "Introduction to Diagonalization contains Definition"
+        "Introduction to Diagonalization contains Similarity of matrices"
       ],
       "source": "introduction to diagonalization",
-      "target": "definition"
+      "target": "similarity of matrices"
     },
     {
       "relation": "CONTAINS",
@@ -139,28 +138,28 @@
       "relation": "CONTAINS",
       "weight": 1,
       "sentences": [
-        "Diagonalization and Linear Applications contains Proposition 1"
+        "Diagonalization and linear applications contains Linear applications"
       ],
       "source": "diagonalization and linear applications",
-      "target": "proposition 1"
+      "target": "linear applications"
     },
     {
       "relation": "CONTAINS",
       "weight": 1,
       "sentences": [
-        "Diagonalization and Linear Applications contains Proposition 2"
+        "Diagonalization and linear applications contains Eigenvectors and eigenvalues"
       ],
       "source": "diagonalization and linear applications",
-      "target": "proposition 2"
+      "target": "eigenvectors and eigenvalues"
     },
     {
       "relation": "CONTAINS",
       "weight": 1,
       "sentences": [
-        "Diagonalization and Linear Applications contains Consequence"
+        "Diagonalization and linear applications contains Associated eigen-spaces"
       ],
       "source": "diagonalization and linear applications",
-      "target": "consequence"
+      "target": "associated eigen-spaces"
     }
   ]
 }

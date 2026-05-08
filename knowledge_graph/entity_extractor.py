@@ -52,33 +52,42 @@ class EntityExtractor:
             ]
         }
         """
-        prompt = f"""Analyze this document and extract the main topic hierarchy.
-Return ONLY a JSON object with this exact structure, no other text:
+        doc_preview = text[:500]
+
+        prompt = f"""You are a knowledge graph builder. Analyze this document and extract a clean concept hierarchy.
+
+STRICT RULES:
+- Extract only REAL CONCEPTS and TOPICS from the content
+- IGNORE completely: author names, university names, course codes, city names, country names, dates, page numbers, slide numbers, words like "Introduction" "Definition" "Proposition" "Example" "Summary" "Conclusion" "Document" "Chapter" "Section"
+- Main topics should be meaningful subject areas (3-6 words max)
+- Subtopics should be specific concepts within that area
+- If this is a math document: extract theorems, methods, formulas concepts, properties
+- If this is a CS document: extract algorithms, data structures, techniques, models  
+- If this is a science document: extract theories, experiments, phenomena, laws
+- If this is a business document: extract processes, frameworks, strategies, metrics
+- The title should be the actual subject matter, not the document name
+
+Return ONLY this JSON with no explanation, no markdown, no extra text:
 {{
-  "title": "main subject of the document",
+  "title": "actual subject of the document",
   "topics": [
     {{
-      "name": "Main Topic 1",
-      "subtopics": ["Subtopic A", "Subtopic B", "Subtopic C"]
-    }},
-    {{
-      "name": "Main Topic 2", 
-      "subtopics": ["Subtopic D", "Subtopic E"]
+      "name": "Main Concept Area",
+      "subtopics": ["specific concept", "specific concept", "specific concept"]
     }}
   ]
 }}
 
-Rules:
-- Maximum 8 main topics
-- Maximum 6 subtopics per topic
-- Topics should be meaningful concepts, not single words
-- Focus on the actual content, ignore slide numbers and formatting
-- Do not include generic words like "Introduction" or "Summary" unless they contain real content
+Constraints:
+- Maximum 7 main topics
+- Maximum 5 subtopics per topic
+- Every item must be a real concept from the content, not a formatting artifact
 
-Document text:
-{text[:4000]}
+Document content:
+{text[:3500]}
 
-Return only the JSON:"""
+Return JSON only:"""
+
 
         try:
             response = requests.post(self.url, json={
