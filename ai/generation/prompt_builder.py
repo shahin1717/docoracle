@@ -24,6 +24,7 @@ def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore
         "For every concept in the context: explain it fully, write out ALL relevant "
         "mathematical formulas explicitly, show worked examples, and explain WHY it works. "
         "If a formula is referenced but not fully written in the context, write it out "
+        "Also generate formulas always in latex format . " 
         "Answer the question thoroughly and in detail using the context. "
         "You may use your own knowledge to explain or clarify concepts from the context. "
         "But not to hallucinate new facts. "
