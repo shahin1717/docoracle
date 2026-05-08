@@ -29,16 +29,16 @@ class GraphBuilder:
         return self.graph
 
     def _add_entities(self, entities: list[dict]):
-        """Each entity becomes a node with its metadata as attributes."""
+        size_map = {"ROOT": 20, "MAIN_TOPIC": 10, "SUBTOPIC": 5, "UNKNOWN": 3}
         for entity in entities:
             node_id = entity["text"].lower()
             self.graph.add_node(node_id, **{
                 "label":     entity["text"],
                 "type":      entity.get("type", "UNKNOWN"),
-                "frequency": entity.get("frequency", 1),
+                "frequency": size_map.get(entity.get("type", "UNKNOWN"), 3),
                 "chunk_ids": entity.get("chunk_ids", []),
             })
-
+            
     def _add_triples(self, triples: list[dict]):
         """
         Each triple becomes a directed edge: subject → object.
