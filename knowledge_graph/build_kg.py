@@ -1,12 +1,15 @@
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ai.ingestion import parse_document
-from ai.chunker import Chunker
 from knowledge_graph import (
     EntityExtractor, RelationExtractor,
     GraphBuilder, GraphStore
 )
+
+from ai.ingestion import parse_document
+from ai.chunker import Chunker
+
 
 
 def build_kg(pdf_path: str):
@@ -55,10 +58,10 @@ def plot_kg(graph, doc_id: str):
 
     # Color nodes by type
     color_map = {
-        "PROPER_NOUN":    "#1D9E75",
-        "TECHNICAL_TERM": "#7F77DD",
-        "DEFINED_TERM":   "#D85A30",
-        "UNKNOWN":        "#888780",
+        "ROOT":       "#7C6FCD",   # purple — center
+        "MAIN_TOPIC": "#4A90D9",   # blue — branches  
+        "SUBTOPIC":   "#5BA85A",   # green — leaves
+        "UNKNOWN":    "#888780",
     }
 
     node_colors = [

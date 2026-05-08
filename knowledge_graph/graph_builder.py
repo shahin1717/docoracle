@@ -29,7 +29,7 @@ class GraphBuilder:
         return self.graph
 
     def _add_entities(self, entities: list[dict]):
-        size_map = {"ROOT": 20, "MAIN_TOPIC": 10, "SUBTOPIC": 5, "UNKNOWN": 3}
+        size_map = {"ROOT": 30, "MAIN_TOPIC": 12, "SUBTOPIC": 5, "UNKNOWN": 3}
         for entity in entities:
             node_id = entity["text"].lower()
             self.graph.add_node(node_id, **{
