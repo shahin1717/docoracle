@@ -1,116 +1,153 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { loginUser } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { loginUser } from "../api/client";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 
-export default function LoginPage() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
-
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
-  const validate = () => {
-    const e = {};
-    if (!email) e.email = "Email is required";
-    if (!password) e.password = "Password is required";
-    return e;
-  };
-
-  const handleSubmit = async (e) => {
+  async function handleLogin(e) {
     e.preventDefault();
-
-    const v = validate();
-    if (Object.keys(v).length > 0) {
-      setErrors(v);
-      return;
-    }
-
+    setError("");
     setLoading(true);
-    setErrors({});
 
     try {
+      // Validate inputs
+      if (!email || !password) {
+        throw new Error("Please fill in all fields");
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error("Please enter a valid email");
+      }
+
+      // Call API
       const data = await loginUser(email, password);
-
-      // backend must return: { access_token: "..." }
-      login(data.access_token);
-
+      
+      // Store token and redirect
+      login(data.access_token || data.token || data);
       navigate("/app");
-
     } catch (err) {
-      setErrors({ api: err.message });
+      setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] px-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12] flex flex-col items-center justify-center px-4">
+      {/* Background glow */}
+      <div className="absolute inset-0 bg-gradient-to-t from-violet-600/10 via-transparent to-transparent pointer-events-none" />
 
-      <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-2xl p-8 backdrop-blur">
-
-        <h1 className="text-3xl font-bold text-white mb-6 text-center">
-          DocOracle Login
-        </h1>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-
-          {/* Email */}
-          <div>
-            <label className="text-xs text-white/60">Email</label>
-            <input
-              className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-white outline-none focus:border-violet-500"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@gmail.com"
-            />
-            {errors.email && (
-              <p className="text-red-400 text-xs mt-1">{errors.email}</p>
-            )}
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 flex items-center justify-center font-bold text-xl text-white">
+              D
+            </div>
+            <div className="text-left">
+              <h1 className="font-bold text-2xl text-white">DocOracle</h1>
+              <p className="text-xs text-white/40">Local AI Workspace</p>
+            </div>
           </div>
+        </div>
 
-          {/* Password */}
-          <div>
-            <label className="text-xs text-white/60">Password</label>
-            <input
-              className="w-full mt-1 p-3 rounded-lg bg-white/5 border border-white/10 text-white outline-none focus:border-violet-500"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
-            {errors.password && (
-              <p className="text-red-400 text-xs mt-1">{errors.password}</p>
-            )}
-          </div>
+        {/* Form Card */}
+        <div className="bg-white/5 border border-white/10 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+          <p className="text-sm text-white/60 mb-6">
+            Sign in to your DocOracle account
+          </p>
 
-          {/* API error */}
-          {errors.api && (
-            <p className="text-red-400 text-xs">{errors.api}</p>
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
           )}
 
-          {/* Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white py-3 rounded-lg font-medium transition"
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                disabled={loading}
+              />
+            </div>
 
-        </form>
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
 
-        <p className="text-center text-xs text-white/40 mt-6">
-          No account?{" "}
-          <Link to="/register" className="text-violet-400 hover:underline">
-            Register
-          </Link>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium py-3 rounded-xl text-white mt-6"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          {/* Sign Up Link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-white/60">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-violet-400 hover:text-violet-300 font-medium transition"
+              >
+                Sign up
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-white/30 mt-6">
+          By signing in, you agree to our Terms of Service
         </p>
-
       </div>
     </div>
   );
