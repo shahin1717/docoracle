@@ -13,17 +13,15 @@ function getHeaders(includeAuth = true) {
 }
 
 // ==================== AUTH ====================
-export async function loginUser(email, password) {
+export async function loginUser(username, password) { 
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    // ИСПРАВЛЕНО: бэкенд ждет 'username', а не 'email'
     body: JSON.stringify({ 
-      username: email, 
+      username: username, 
       password: password 
     }),
   });
-
   if (!res.ok) {
     const err = await res.json();
     throw new Error(err.detail || "Login failed");

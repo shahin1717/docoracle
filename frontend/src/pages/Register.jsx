@@ -68,15 +68,15 @@ export default function Register() {
 
       // Auto-login after successful registration
       setTimeout(async () => {
-        try {
-          const data = await loginUser(email, password);
-          login(data.access_token || data.token || data);
-          navigate("/app");
-        } catch (err) {
-          // If auto-login fails, redirect to login page
-          navigate("/login");
-        }
-      }, 1500);
+      try {
+        // Входим по 'name', так как именно оно стало 'username' в базе
+        const data = await loginUser(name, password); 
+        login(data.access_token || data.token || data);
+        navigate("/app");
+      } catch (err) {
+        navigate("/login");
+      }
+    }, 1500);
     } catch (err) {
       setError(err.message);
     } finally {

@@ -5,7 +5,7 @@ import { loginUser } from "../api/client";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -20,17 +20,13 @@ export default function Login() {
 
     try {
       // Validate inputs
-      if (!email || !password) {
+      if (!username || !password) {
         throw new Error("Please fill in all fields");
       }
 
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        throw new Error("Please enter a valid email");
-      }
-
       // Call API
-      const data = await loginUser(email, password);
-      
+      const data = await loginUser(username, password);
+
       // Store token and redirect
       login(data.access_token || data.token || data);
       navigate("/app");
@@ -83,9 +79,9 @@ export default function Login() {
                 Email
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 placeholder="you@example.com"
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
                 disabled={loading}
