@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000";
+const API_URL = "http://127.0.0.1:8000";
 
 // Helper to add auth token to requests
 function getHeaders(includeAuth = true) {
@@ -17,7 +17,11 @@ export async function loginUser(email, password) {
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    // ИСПРАВЛЕНО: бэкенд ждет 'username', а не 'email'
+    body: JSON.stringify({ 
+      username: email, 
+      password: password 
+    }),
   });
 
   if (!res.ok) {
@@ -26,19 +30,26 @@ export async function loginUser(email, password) {
   }
 
   const data = await res.json();
-  return data; // { access_token: "...", token_type: "bearer" }
+  return data;
 }
 
 export async function registerUser(name, email, password) {
   const res = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    // ИСПРАВЛЕНО: бэкенд ждет 'username', а не 'name'
+    body: JSON.stringify({ 
+      username: name, 
+      email: email, 
+      password: password 
+    }),
   });
 
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.detail || "Registration failed");
+    // Обработка случая, когда detail — это массив (Pydantic validation error)
+    const message = Array.isArray(err.detail) ? err.detail[0].msg : err.detail;
+    throw new Error(message || "Registration failed");
   }
 
   return res.json();
