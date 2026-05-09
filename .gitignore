@@ -21,3 +21,6 @@ data/docs.db
 .env
 .venv/
 *.pdf
+package-lock.json
+node_modules/
+/frontend/package-lock.json
