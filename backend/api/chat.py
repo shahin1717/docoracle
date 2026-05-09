@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 # ── request schema ────────────────────────────────────────────────────────────
 class QueryRequest(BaseModel):
     query:   str
-    doc_ids: list[str]   # which documents to query against
+    doc_ids: list[str]
 
 
 # ── POST /chat/query ──────────────────────────────────────────────────────────
@@ -33,48 +33,44 @@ async def chat_query(
     """
     SSE streaming endpoint.
 
-    Event types sent to frontend:
-        data: {"type": "token",  "content": "<token>"}
-        data: {"type": "sources","content": [ ...chunks... ]}
+    Event types:
+        data: {"type": "token",   "content": "<token>"}
+        data: {"type": "sources", "content": [...chunks...]}
         data: {"type": "done"}
-        data: {"type": "error",  "content": "<message>"}
+        data: {"type": "error",   "content": "<message>"}
     """
     if not body.query.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Query cannot be empty.",
         )
-
     if not body.doc_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Select at least one document.",
         )
 
-    # ── verify all doc_ids belong to this user ────────────────────────────────
+    # verify ownership + readiness
     for doc_id in body.doc_ids:
         doc = db.query(Document).filter(
             Document.id == doc_id,
             Document.user_id == current_user.id,
         ).first()
         if not doc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document {doc_id} not found.",
-            )
+            raise HTTPException(status_code=404, detail=f"Document {doc_id} not found.")
         if doc.status != "ready":
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
+                status_code=409,
                 detail=f"Document '{doc.filename}' is still being processed.",
             )
 
+    # pass user's chosen model into the pipeline
+    model = current_user.preferred_model  # None → query_service falls back to settings
+
     return StreamingResponse(
-        _event_stream(body.query, body.doc_ids, current_user.id),
+        _event_stream(body.query, body.doc_ids, current_user.id, model),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable nginx buffering
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -83,23 +79,19 @@ async def _event_stream(
     query: str,
     doc_ids: list[str],
     user_id: str,
+    model: str | None,
 ) -> AsyncGenerator[str, None]:
-    """Wraps the synchronous stream_answer generator into SSE events."""
-
     collected_tokens = []
     chunk_ids_used   = []
 
     try:
-        for token in stream_answer(query, doc_ids, user_id):
-            # query_service prefixes chunk_ids with a special marker
+        for token in stream_answer(query, doc_ids, user_id, model=model):
             if isinstance(token, dict) and token.get("chunk_ids"):
                 chunk_ids_used = token["chunk_ids"]
                 continue
-
             collected_tokens.append(token)
             yield _sse({"type": "token", "content": token})
 
-        # ── send source citations after streaming ─────────────────────────────
         if chunk_ids_used:
             sources = get_source_chunks(chunk_ids_used)
             yield _sse({"type": "sources", "content": sources})
@@ -112,5 +104,4 @@ async def _event_stream(
 
 
 def _sse(payload: dict) -> str:
-    """Format a dict as a Server-Sent Event string."""
     return f"data: {json.dumps(payload)}\n\n"

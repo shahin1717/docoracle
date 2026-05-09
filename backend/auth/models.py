@@ -22,12 +22,18 @@ class TokenResponse(BaseModel):
     token_type:   str = "bearer"
 
 
-# ── Current user (returned by middleware) ─────────────────────────────────────
+# ── Current user ──────────────────────────────────────────────────────────────
 class UserOut(BaseModel):
-    id:         str
-    username:   str
-    email:      str
-    is_active:  bool
-    created_at: datetime
+    id:              str
+    username:        str
+    email:           str
+    is_active:       bool
+    preferred_model: str | None   # None = use server default
+    created_at:      datetime
 
-    model_config = {"from_attributes": True}   # allows UserOut.model_validate(db_user)
+    model_config = {"from_attributes": True}
+
+
+# ── Update preferences ────────────────────────────────────────────────────────
+class UserUpdateRequest(BaseModel):
+    preferred_model: str | None = None   # pass None to reset to server default

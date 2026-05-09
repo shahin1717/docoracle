@@ -12,6 +12,7 @@ def stream_answer(
     query: str,
     doc_ids: list[str],
     user_id: str,
+    model: str | None = None,        # ← user's chosen model, falls back to settings
 ) -> Generator[str, None, None]:
     """
     Full RAG pipeline — yields answer tokens one by one.
@@ -24,6 +25,9 @@ def stream_answer(
         5. build_prompt      → messages list
         6. LLMClient.stream  → yield tokens to caller (FastAPI SSE)
     """
+    llm_model = model or settings.llm_model
+    log.info("query: using model %s", llm_model)
+
     try:
         # ── 1. embed query ────────────────────────────────────────────────────
         from ai.embedding.embedder import Embedder
@@ -36,16 +40,13 @@ def stream_answer(
         # ── 2. load stores for each requested document ────────────────────────
         from ai.vectorstore.faiss_store import FAISSStore
         from ai.vectorstore.metadata_store import MetadataStore
-
-        meta_store = MetadataStore(db_path=settings.docs_db_path)
-
-        # merge FAISS indices from all selected docs
         from ai.retrieval.dense_retriever import DenseRetriever
         from ai.retrieval.bm25_retriever import BM25Retriever
         from ai.retrieval.hybrid_retriever import HybridRetriever
         from ai.retrieval.reranker import Reranker
 
-        all_chunks = []
+        meta_store = MetadataStore(db_path=settings.docs_db_path)
+        all_chunks  = []
         all_vectors = []
 
         for doc_id in doc_ids:
@@ -76,7 +77,7 @@ def stream_answer(
         log.info("query: %d candidates from hybrid retrieval", len(candidates))
 
         # ── 4. rerank ─────────────────────────────────────────────────────────
-        reranker = Reranker(embedder=embedder)
+        reranker   = Reranker(embedder=embedder)
         top_chunks = reranker.rerank(
             query=query,
             query_vector=query_vector,
@@ -91,16 +92,14 @@ def stream_answer(
             from knowledge_graph.graph_store import GraphStore
             from knowledge_graph.graph_retriever import GraphRetriever
 
-            graphs_dir = Path(settings.graphs_dir)
             all_graph_facts = []
-
             for doc_id in doc_ids:
-                graph_path = graphs_dir / f"{doc_id}.json"
+                graph_path = Path(settings.graphs_dir) / f"{doc_id}.json"
                 if graph_path.exists():
-                    g_store = GraphStore(str(graphs_dir))
-                    graph = g_store.load(doc_id)
+                    g_store  = GraphStore(str(settings.graphs_dir))
+                    graph    = g_store.load(doc_id)
                     retriever = GraphRetriever(graph)
-                    facts = retriever.get_context_for_query(query)
+                    facts    = retriever.get_context_for_query(query)
                     all_graph_facts.extend(facts)
 
             if all_graph_facts:
@@ -113,7 +112,7 @@ def stream_answer(
         # ── 6. build prompt ───────────────────────────────────────────────────
         from ai.generation.prompt_builder import build_prompt
         chunk_ids = [c.chunk_id for c in top_chunks]
-        messages = build_prompt(
+        messages  = build_prompt(
             query=query,
             chunk_ids=chunk_ids,
             store=meta_store,
@@ -124,9 +123,8 @@ def stream_answer(
         from ai.generation.llm_client import LLMClient
         llm = LLMClient(
             base_url=settings.ollama_base_url,
-            model=settings.llm_model,
+            model=llm_model,               # ← user's chosen model
         )
-        log.info("query: streaming from %s", settings.llm_model)
         yield from llm.stream(messages)
 
     except Exception as exc:
@@ -135,10 +133,7 @@ def stream_answer(
 
 
 def get_source_chunks(chunk_ids: list[str]) -> list[dict]:
-    """
-    Return chunk text + metadata for citation cards.
-    Called after streaming completes with the chunk_ids used.
-    """
+    """Return chunk text + metadata for citation cards."""
     from ai.vectorstore.metadata_store import MetadataStore
     meta_store = MetadataStore(db_path=settings.docs_db_path)
     return [meta_store.get_chunk(cid) for cid in chunk_ids if cid]
