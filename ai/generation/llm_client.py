@@ -4,7 +4,7 @@ from typing import Iterator
 
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
-DEFAULT_MODEL = "mistral:7b-instruct-q4_0"
+DEFAULT_MODEL = "mistral:7b-instruct-q8_0"
 
 
 class LLMClient:
@@ -23,6 +23,11 @@ class LLMClient:
             "model": self.model,
             "messages": messages,
             "stream": False,
+            "options": {
+            "temperature": 0.7,
+            "num_predict": 4096, 
+            "top_p": 0.9,
+        }
         }, timeout=120)
         response.raise_for_status()
         return response.json()["message"]["content"]
@@ -41,6 +46,11 @@ class LLMClient:
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "options": {
+            "temperature": 0.7,
+            "num_predict": 4096,  
+            "top_p": 0.9,
+        }
         }, stream=True, timeout=120)
         response.raise_for_status()
 

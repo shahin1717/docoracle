@@ -50,49 +50,41 @@ class RelationExtractor:
     For better quality later, swap _extract_from_sentence with
     an LLM prompt call using the local Ollama model.
     """
-
     def __init__(self, window_size: int = 150):
-        # Max character distance between subject and object in a sentence
         self.window_size = window_size
 
     def extract(self, text: str, entities: list[dict]) -> list[dict]:
-        """
-        Extract relation triples from text given a list of entities.
-        Returns list of {subject, relation, object, sentence}
-        """
-        if len(entities) < 2:
-            return []
+        return self._from_hierarchy(entities)
 
-        sentences = self._split_sentences(text)
+    def extract_from_chunks(self, chunks: list[dict], entities: list[dict]) -> list[dict]:
+        return self._from_hierarchy(entities)
+
+    def _from_hierarchy(self, entities: list[dict]) -> list[dict]:
+        """
+        Build triples from parent-child relationships in the entity hierarchy.
+        ROOT → CONTAINS → MAIN_TOPIC
+        MAIN_TOPIC → CONTAINS → SUBTOPIC
+        """
         triples = []
+        entity_map = {e["text"]: e for e in entities}
 
-        for sentence in sentences:
-            found = self._entities_in_sentence(sentence, entities)
-            if len(found) < 2:
+        for entity in entities:
+            parent_name = entity.get("parent")
+            if not parent_name:
                 continue
-            new_triples = self._extract_from_sentence(sentence, found)
-            triples.extend(new_triples)
-
-        return self._deduplicate(triples)
-
-    def extract_from_chunks(
-        self, chunks: list[dict], entities: list[dict]
-    ) -> list[dict]:
-        """Extract triples across all chunks."""
-        all_triples = []
-        entity_texts = [e["text"] for e in entities]
-
-        for chunk in chunks:
-            # Only process chunks that contain at least 2 known entities
-            present = [e for e in entities if e["text"].lower() in chunk["text"].lower()]
-            if len(present) < 2:
+            if parent_name not in entity_map:
                 continue
-            triples = self.extract(chunk["text"], present)
-            for t in triples:
-                t["chunk_id"] = chunk["chunk_id"]
-            all_triples.extend(triples)
 
-        return self._deduplicate(all_triples)
+            triples.append({
+                "subject":  parent_name,
+                "relation": "CONTAINS",
+                "object":   entity["text"],
+                "sentence": f"{parent_name} contains {entity['text']}",
+            })
+
+        return triples
+    
+
 
     def _extract_from_sentence(self, sentence: str, entities: list[dict]) -> list[dict]:
         """Try all relation patterns against a sentence containing 2+ entities."""

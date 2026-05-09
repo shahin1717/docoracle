@@ -55,7 +55,9 @@ class MetadataStore:
             "INSERT OR REPLACE INTO chunks VALUES (?,?,?,?,?,?,?,?,?)", rows
         )
         self._conn.commit()
-
+    def get_chunks_for_doc(self, source_path: str) -> list[dict]:
+        """Alias used by backend services."""
+        return self.get_by_source(source_path)
     def get_chunk(self, chunk_id: str) -> dict | None:
         row = self._conn.execute(
             "SELECT * FROM chunks WHERE chunk_id = ?", (chunk_id,)
