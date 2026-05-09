@@ -24,3 +24,4 @@ data/docs.db
 package-lock.json
 node_modules/
 /frontend/package-lock.json
+txt.txt
