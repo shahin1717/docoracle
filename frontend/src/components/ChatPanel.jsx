@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { streamQuery } from "../api/client";
 import { Send, AlertCircle } from "lucide-react";
+import CitationCard from "./CitationCard";
 
 export default function ChatPanel({ documents = [] }) {
   const [messages, setMessages] = useState([
@@ -67,7 +68,7 @@ export default function ChatPanel({ documents = [] }) {
           setMessages((prev) =>
             prev.map((msg) => {
               if (msg.id === assistantId) {
-                if (chunk.type === "content") {
+                if (chunk.type === "token") {
                   return {
                     ...msg,
                     text: msg.text + (chunk.content || ""),
@@ -75,7 +76,7 @@ export default function ChatPanel({ documents = [] }) {
                 } else if (chunk.type === "sources") {
                   return {
                     ...msg,
-                    sources: chunk.sources || [],
+                    sources: chunk.content || [],
                   };
                 }
               }
@@ -159,14 +160,22 @@ export default function ChatPanel({ documents = [] }) {
               </p>
 
               {message.sources && message.sources.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs text-white/30 mb-1">Sources</p>
                   {message.sources.map((source, i) => (
-                    <div
-                      key={i}
-                      className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1"
-                    >
-                      {typeof source === "string" ? source : source.name || source}
-                    </div>
+                    <CitationCard
+                      key={source?.chunk_id ?? i}
+                      source={
+                        source?.title ||
+                        (source?.source_path
+                          ? source.source_path.split("/").pop()
+                          : null) ||
+                        (typeof source === "string" ? source : "Unknown source")
+                      }
+                      page={source?.page_num ?? "?"}
+                      snippet={source?.text ?? ""}
+                      score={source?.score ?? null}
+                    />
                   ))}
                 </div>
               )}

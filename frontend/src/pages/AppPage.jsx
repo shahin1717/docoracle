@@ -11,18 +11,22 @@ export default function AppPage() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
-  // Fetch documents on mount
+  // Fetch documents on mount (single source of truth)
   useEffect(() => {
     loadDocuments();
   }, []);
 
   async function loadDocuments() {
+    setDocsLoading(true);
     try {
       const docs = await getDocuments();
       setDocuments(docs);
     } catch (err) {
       console.error("Failed to load documents:", err);
+    } finally {
+      setDocsLoading(false);
     }
   }
 
@@ -40,7 +44,11 @@ export default function AppPage() {
   return (
     <div className="h-screen bg-[#0b0b12] text-white flex overflow-hidden">
       {/* Left Sidebar - Documents */}
-      <DocumentSidebar />
+      <DocumentSidebar
+          documents={documents}
+          loading={docsLoading}
+          onDocumentsChange={setDocuments}
+        />
 
       {/* Center - Chat */}
       <ChatPanel documents={documents} />

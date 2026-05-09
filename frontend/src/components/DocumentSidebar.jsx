@@ -1,32 +1,11 @@
-import { useState, useEffect, useRef } from "react";
-import { getDocuments, uploadDocument, deleteDocument } from "../api/client";
+import { useState, useRef } from "react";
+import { uploadDocument, deleteDocument } from "../api/client";
 import { FileText, Trash2, Upload } from "lucide-react";
 
-export default function DocumentSidebar() {
-  const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(false);
+export default function DocumentSidebar({ documents = [], loading = false, onDocumentsChange }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
-
-  // Fetch documents on mount
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  async function fetchDocuments() {
-    setLoading(true);
-    setError(null);
-    try {
-      const docs = await getDocuments();
-      setDocuments(docs);
-    } catch (err) {
-      setError(err.message);
-      console.error("Failed to fetch documents:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleFileUpload(e) {
     const file = e.target.files?.[0];
@@ -37,7 +16,7 @@ export default function DocumentSidebar() {
 
     try {
       const newDoc = await uploadDocument(file);
-      setDocuments([newDoc, ...documents]);
+      onDocumentsChange?.([newDoc, ...documents]);
       
       // Reset file input
       if (fileInputRef.current) {
@@ -58,7 +37,7 @@ export default function DocumentSidebar() {
 
     try {
       await deleteDocument(docId);
-      setDocuments(documents.filter((doc) => doc.id !== docId));
+      onDocumentsChange?.(documents.filter((doc) => doc.id !== docId));
     } catch (err) {
       setError(err.message);
       console.error("Delete failed:", err);
