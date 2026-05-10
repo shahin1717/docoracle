@@ -25,6 +25,7 @@ package-lock.json
 node_modules/
 /frontend/package-lock.json
 txt.txt
+<<<<<<< HEAD
 backend/__pycache__/config.cpython-311.pyc
 backend/__pycache__/logging.cpython-311.pyc
 backend/__pycache__/main.cpython-311.pyc
@@ -68,3 +69,5 @@ package-lock.json
 node_modules/
 /frontend/package-lock.json
 txt.txt
+=======
+>>>>>>> main

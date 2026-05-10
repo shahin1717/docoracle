@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # ── Ollama ────────────────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "mistral:7b-instruct-q4_0"
+    llm_model: str = "mistral:7b-instruct-q8_0"
     embed_model: str = "nomic-embed-text"
 
     # ── RAG ───────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     rerank_top_k: int = 5           # chunks sent to LLM
 
     # ── CORS ──────────────────────────────────────────────────────────────────
-    allowed_origins: list[str] = ["http://localhost:5173"]   # Vite dev server
+    allowed_origins: list[str] = ["http://localhost:5173","http://127.0.0.1:5173"]   # Vite dev server
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

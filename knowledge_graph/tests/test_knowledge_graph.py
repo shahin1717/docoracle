@@ -6,12 +6,12 @@ import tempfile
 from pathlib import Path
 import re
 
-from entity_extractor import EntityExtractor
-from relation_extractor import RelationExtractor
-from graph_builder import GraphBuilder
-from graph_store import GraphStore
-from graph_retriever import GraphRetriever
-from graph_exporter import GraphExporter
+from knowledge_graph.entity_extractor import EntityExtractor
+from knowledge_graph.relation_extractor import RelationExtractor
+from knowledge_graph.graph_builder import GraphBuilder
+from knowledge_graph.graph_store import GraphStore
+from knowledge_graph.graph_retriever import GraphRetriever
+from knowledge_graph.graph_exporter import GraphExporter
 
 
 SAMPLE_TEXT = """
