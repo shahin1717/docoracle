@@ -1,7 +1,7 @@
 from ai.vectorstore.metadata_store import MetadataStore
 
 
-def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore) -> list[dict]:
+def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore, chat_history: list[dict] = None) -> list[dict]:
     """
     Assembles the message list to send to Ollama.
     Returns OpenAI-style messages: [system, user].
@@ -35,7 +35,15 @@ def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore
 
     user_message = f"Context:\n{context}\n\nQuestion: {query}"
 
-    return [
+    messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_message},
     ]
+
+    if chat_history:
+        # Include the last 6 messages to keep context without exceeding context window
+        for msg in chat_history[-6:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+    
+    messages.append({"role": "user", "content": user_message})
+
+    return messages

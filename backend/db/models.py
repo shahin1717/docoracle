@@ -32,6 +32,10 @@ class User(Base):
     documents = relationship("Document", back_populates="owner",
                              cascade="all, delete-orphan")
 
+    # one user -> many chat sessions
+    chat_sessions = relationship("ChatSession", back_populates="owner",
+                                 cascade="all, delete-orphan")
+
     def __repr__(self) -> str:
         return f"<User id={self.id} username={self.username}>"
 
@@ -64,3 +68,36 @@ class Document(Base):
 
     def __repr__(self) -> str:
         return f"<Document id={self.id} filename={self.filename} status={self.status}>"
+
+
+# ── ChatSession ───────────────────────────────────────────────────────────────
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title      = Column(String(255), default="New Chat", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    owner    = relationship("User", back_populates="chat_sessions")
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<ChatSession id={self.id} title={self.title}>"
+
+
+# ── ChatMessage ───────────────────────────────────────────────────────────────
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    session_id = Column(String, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role       = Column(String(32), nullable=False)  # "user" or "assistant"
+    content    = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    session = relationship("ChatSession", back_populates="messages")
+
+    def __repr__(self) -> str:
+        return f"<ChatMessage id={self.id} role={self.role}>"

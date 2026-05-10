@@ -138,11 +138,12 @@ export async function queryDocuments(query, docIds = null) {
 }
 
 // Stream helper for chat responses (Server-Sent Events)
-export async function streamQuery(query, docIds = null, onChunk, onError) {
+export async function streamQuery(query, docIds = null, sessionId = null, onChunk, onError) {
   try {
     const payload = {
       query,
       doc_ids: docIds,
+      session_id: sessionId,
     };
 
     const token = localStorage.getItem("token");
@@ -203,6 +204,32 @@ export async function streamQuery(query, docIds = null, onChunk, onError) {
     onError?.(error);
   }
 }
+
+export async function getChatSessions() {
+  const res = await fetch(`${API_URL}/chat/sessions`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch chat sessions");
+  return res.json();
+}
+
+export async function getChatSession(sessionId) {
+  const res = await fetch(`${API_URL}/chat/sessions/${sessionId}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch chat session");
+  return res.json();
+}
+
+export async function deleteChatSession(sessionId) {
+  const res = await fetch(`${API_URL}/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete chat session");
+  return res.json();
+}
+
 
 // ==================== KNOWLEDGE GRAPH ====================
 export async function getDocumentGraph(docId) {

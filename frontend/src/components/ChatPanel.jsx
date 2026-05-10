@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { streamQuery } from "../api/client";
+import { streamQuery, getChatSession } from "../api/client";
 import { Send, AlertCircle, Loader2 } from "lucide-react";
 
-export default function ChatPanel({ documents = [] }) {
+export default function ChatPanel({ documents = [], sessionId, onSessionChange }) {
   const [messages, setMessages] = useState([
     {
       id: "welcome",
@@ -24,6 +24,56 @@ export default function ChatPanel({ documents = [] }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load session when sessionId changes
+  useEffect(() => {
+    if (sessionId) {
+      loadSession();
+    } else {
+      setMessages([
+        {
+          id: "welcome",
+          role: "assistant",
+          text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+          sources: [],
+          isStreaming: false,
+        },
+      ]);
+    }
+  }, [sessionId]);
+
+  async function loadSession() {
+    try {
+      setLoading(true);
+      setError(null);
+      const session = await getChatSession(sessionId);
+      const formattedMessages = session.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        text: m.content,
+        sources: [], // we don't persist sources in DB yet
+        isStreaming: false,
+      }));
+      if (formattedMessages.length > 0) {
+        setMessages(formattedMessages);
+      } else {
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+            sources: [],
+            isStreaming: false,
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load chat history.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSendMessage() {
     if (!input.trim() || loading) return;
@@ -49,8 +99,12 @@ export default function ChatPanel({ documents = [] }) {
       isStreaming: true,
     };
 
-    // Add messages
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    // Remove welcome message if it's the first message
+    setMessages((prev) => {
+      const filtered = prev.filter((m) => m.id !== "welcome");
+      return [...filtered, userMessage, assistantMessage];
+    });
+
     const currentInput = input.trim();
     setInput("");
     setLoading(true);
@@ -60,7 +114,15 @@ export default function ChatPanel({ documents = [] }) {
       await streamQuery(
         currentInput,
         documents.map((d) => d.id),
+        sessionId,
         (chunk) => {
+          if (chunk.type === "session") {
+            if (!sessionId && onSessionChange) {
+              onSessionChange(chunk.content);
+            }
+            return;
+          }
+
           setMessages((prev) =>
             prev.map((msg) => {
               if (msg.id !== assistantId) return msg;
@@ -70,18 +132,15 @@ export default function ChatPanel({ documents = [] }) {
                   ...msg,
                   text: msg.text + (chunk.content || ""),
                 };
-              } 
-              else if (chunk.type === "sources") {
+              } else if (chunk.type === "sources") {
                 return {
                   ...msg,
                   sources: Array.isArray(chunk.content) ? chunk.content : [],
                 };
-              } 
-              else if (chunk.type === "error") {
+              } else if (chunk.type === "error") {
                 setError(chunk.content);
                 return { ...msg, isStreaming: false };
-              } 
-              else if (chunk.type === "done") {
+              } else if (chunk.type === "done") {
                 return { ...msg, isStreaming: false };
               }
 
@@ -92,7 +151,7 @@ export default function ChatPanel({ documents = [] }) {
         (err) => {
           console.error("Stream error:", err);
           setError(err.message || "Something went wrong while streaming response.");
-          
+
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantId
@@ -106,9 +165,7 @@ export default function ChatPanel({ documents = [] }) {
       console.error("Query error:", err);
       setError(err.message || "Failed to get response from AI.");
 
-      setMessages((prev) =>
-        prev.filter((msg) => msg.id !== assistantId)
-      );
+      setMessages((prev) => prev.filter((msg) => msg.id !== assistantId));
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -172,9 +229,7 @@ export default function ChatPanel({ documents = [] }) {
               {/* Sources */}
               {message.sources && message.sources.length > 0 && (
                 <div className="mt-4">
-                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
-                    Sources
-                  </p>
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Sources</p>
                   <div className="flex flex-wrap gap-2">
                     {message.sources.map((source, i) => (
                       <div

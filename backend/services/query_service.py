@@ -14,6 +14,7 @@ def stream_answer(
     doc_ids: list[str],
     user_id: str,
     model: str | None = None,
+    chat_history: list[dict] = None,
 ) -> Generator[str, None, None]:
     llm_model = model or settings.llm_model
     log.info("query: using model %s", llm_model)
@@ -94,7 +95,12 @@ def stream_answer(
 
         from ai.generation.prompt_builder import build_prompt
         chunk_ids = [c[0] for c in top_chunks]
-        messages = build_prompt(query=query, chunk_ids=chunk_ids, metadata_store=meta_store)
+        messages = build_prompt(
+            query=query, 
+            chunk_ids=chunk_ids, 
+            metadata_store=meta_store,
+            chat_history=chat_history
+        )
         if graph_context:
             messages[1]["content"] = graph_context + "\n\n" + messages[1]["content"]
 

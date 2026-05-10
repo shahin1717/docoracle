@@ -11,6 +11,8 @@ export default function AppPage() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [documents, setDocuments] = useState([]);
+  const [sessionId, setSessionId] = useState(null);
+  const [refreshChats, setRefreshChats] = useState(0);
 
   // Fetch documents on mount
   useEffect(() => {
@@ -40,10 +42,23 @@ export default function AppPage() {
   return (
     <div className="h-screen bg-[#0b0b12] text-white flex overflow-hidden">
       {/* Left Sidebar - Documents */}
-      <DocumentSidebar />
+      <DocumentSidebar 
+        sessionId={sessionId}
+        onSessionSelect={setSessionId}
+        refreshTrigger={refreshChats}
+        documents={documents}
+        onDocumentsChange={loadDocuments}
+      />
 
       {/* Center - Chat */}
-      <ChatPanel documents={documents} />
+      <ChatPanel 
+        documents={documents} 
+        sessionId={sessionId}
+        onSessionChange={(id) => {
+          setSessionId(id);
+          setRefreshChats(prev => prev + 1);
+        }}
+      />
 
       {/* Right Panel - Knowledge Graph */}
       <GraphViewer documents={documents} />
