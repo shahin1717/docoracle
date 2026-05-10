@@ -15,6 +15,10 @@ def run_ingestion(document_id: str) -> None:
     db = SessionLocal()
 
     try:
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            raise ValueError(f"Document {document_id} not found")
+        
         from ai.ingestion.router import parse_document
         parsed = parse_document(doc.file_path)
         log.info("ingest: parsed %s — %d pages", doc.filename, parsed.page_count)
