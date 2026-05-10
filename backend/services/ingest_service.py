@@ -10,13 +10,9 @@ from backend.db.models import Document
 log = logging.getLogger(__name__)
 
 
-def run_ingestion(document_id: str, db: Session) -> None:
-    doc = db.query(Document).filter(Document.id == document_id).first()
-    if not doc:
-        log.error("ingest: document %s not found", document_id)
-        return
-
-    _set_status(doc, "processing", db)
+def run_ingestion(document_id: str) -> None:
+    from backend.db.database import SessionLocal
+    db = SessionLocal()
 
     try:
         from ai.ingestion.router import parse_document
@@ -72,6 +68,8 @@ def run_ingestion(document_id: str, db: Session) -> None:
         log.exception("ingest: failed for document %s", document_id)
         doc.error_msg = str(exc)
         _set_status(doc, "failed", db)
+    finally:
+        db.close()
 
 
 def _set_status(doc: Document, status: str, db: Session) -> None:

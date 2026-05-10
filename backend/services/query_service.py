@@ -1,36 +1,12 @@
-# backend/services/query_service.py
-import logging
-from pathlib import Path
-from typing import Generator
-
-from backend.config import settings
-
-log = logging.getLogger(__name__)
-
-
 def stream_answer(
     query: str,
     doc_ids: list[str],
     user_id: str,
-    model: str | None = None,        # ← user's chosen model, falls back to settings
+    model: str | None = None,
 ) -> Generator[str, None, None]:
-<<<<<<< HEAD
-    """
-    Full RAG pipeline — yields answer tokens one by one.
-
-    Steps:
-        1. Embed the query
-        2. HybridRetriever  → top-K candidate chunk IDs  (dense + BM25 + RRF)
-        3. Reranker          → top rerank_top_k chunks
-        4. GraphRetriever    → graph context sentences
-        5. build_prompt      → messages list
-        6. LLMClient.stream  → yield tokens to caller (FastAPI SSE)
-    """
     llm_model = model or settings.llm_model
     log.info("query: using model %s", llm_model)
 
-=======
->>>>>>> main
     try:
         from ai.embedding.embedder import Embedder
         embedder = Embedder(
@@ -48,13 +24,8 @@ def stream_answer(
         from backend.db.models import Document as DocumentModel
 
         meta_store = MetadataStore(db_path=settings.docs_db_path)
-<<<<<<< HEAD
-        all_chunks  = []
-        all_vectors = []
-=======
         all_chunks = []
         last_faiss_path = None
->>>>>>> main
 
         _db = SessionLocal()
         for doc_id in doc_ids:
@@ -83,13 +54,8 @@ def stream_answer(
         candidates = hybrid.retrieve(query, top_k=settings.retrieval_top_k)
         log.info("query: %d candidates from hybrid retrieval", len(candidates))
 
-<<<<<<< HEAD
-        # ── 4. rerank ─────────────────────────────────────────────────────────
-        reranker   = Reranker(embedder=embedder)
-=======
         chunk_dicts = [{"chunk_id": c["chunk_id"], "text": c["text"]} for c in all_chunks]
         reranker = Reranker(embedder=embedder)
->>>>>>> main
         top_chunks = reranker.rerank(
             query=query,
             candidates=candidates,
@@ -101,28 +67,14 @@ def stream_answer(
         try:
             from knowledge_graph.graph_store import GraphStore
             from knowledge_graph.graph_retriever import GraphRetriever
-<<<<<<< HEAD
-
-=======
-            graphs_dir = Path(settings.graphs_dir)
->>>>>>> main
             all_graph_facts = []
             for doc_id in doc_ids:
                 graph_path = Path(settings.graphs_dir) / f"{doc_id}.json"
                 if graph_path.exists():
-<<<<<<< HEAD
-                    g_store  = GraphStore(str(settings.graphs_dir))
-                    graph    = g_store.load(doc_id)
-                    retriever = GraphRetriever(graph)
-                    facts    = retriever.get_context_for_query(query)
-                    all_graph_facts.extend(facts)
-
-=======
-                    graph = GraphStore(str(graphs_dir)).load(doc_id)
+                    graph = GraphStore(str(settings.graphs_dir)).load(doc_id)
                     facts = GraphRetriever(graph).get_context_for_query(query)
                     if facts:
                         all_graph_facts.append(facts)
->>>>>>> main
             if all_graph_facts:
                 graph_context = "\n".join(all_graph_facts)
                 log.info("query: graph context added")
@@ -130,30 +82,15 @@ def stream_answer(
             log.warning("query: graph context unavailable — continuing without it")
 
         from ai.generation.prompt_builder import build_prompt
-<<<<<<< HEAD
-        chunk_ids = [c.chunk_id for c in top_chunks]
-        messages  = build_prompt(
-            query=query,
-            chunk_ids=chunk_ids,
-            store=meta_store,
-            graph_context=graph_context,
-        )
-=======
         chunk_ids = [c[0] for c in top_chunks]
         messages = build_prompt(query=query, chunk_ids=chunk_ids, metadata_store=meta_store)
         if graph_context:
             messages[1]["content"] = graph_context + "\n\n" + messages[1]["content"]
->>>>>>> main
 
         from ai.generation.llm_client import LLMClient
         llm = LLMClient(
-<<<<<<< HEAD
-            base_url=settings.ollama_base_url,
-            model=llm_model,               # ← user's chosen model
-=======
-            model=settings.llm_model,
+            model=llm_model,
             ollama_url=f"{settings.ollama_base_url}/api/chat",
->>>>>>> main
         )
         yield from llm.stream(messages)
 
@@ -163,10 +100,6 @@ def stream_answer(
 
 
 def get_source_chunks(chunk_ids: list[str]) -> list[dict]:
-<<<<<<< HEAD
-    """Return chunk text + metadata for citation cards."""
-=======
->>>>>>> main
     from ai.vectorstore.metadata_store import MetadataStore
     meta_store = MetadataStore(db_path=settings.docs_db_path)
     return [meta_store.get_chunk(cid) for cid in chunk_ids if cid]
