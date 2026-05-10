@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from backend.auth.middleware import get_current_user
 from backend.config import settings
 from backend.db.database import get_db
-from backend.db.models import Document, User
+from backend.db.models import Document, User, ChatSession
 from backend.services.ingest_service import run_ingestion
 from backend.services.kg_service import build_knowledge_graph
 
@@ -33,6 +33,7 @@ class DocumentOut(BaseModel):
     chunk_count: int
     page_count:  int
     kg_ready:    bool
+    session_id:  str | None
 
     model_config = {"from_attributes": True}
 
@@ -75,6 +76,18 @@ async def upload_document(
 
     dest.write_bytes(content)
     log.info("upload: saved %s (%d bytes) for user %s", dest.name, len(content), current_user.id)
+
+    # ── create chat session if missing ────────────────────────────────────────
+    if not session_id:
+        new_session = ChatSession(
+            user_id=current_user.id, 
+            title=f"Chat: {file.filename}"
+        )
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)
+        session_id = new_session.id
+        log.info("upload: created new session %s for user %s", session_id, current_user.id)
 
     # ── create DB row ─────────────────────────────────────────────────────────
     doc = Document(

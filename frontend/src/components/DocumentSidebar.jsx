@@ -42,11 +42,15 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
     setError(null);
 
     try {
-      if (!sessionId) {
-        setError("Please create or select a chat first before uploading documents.");
-        return;
+      const newDoc = await uploadDocument(file, sessionId);
+      
+      // If we didn't have a session, the backend created one.
+      // Let's select it and refresh sessions list.
+      if (!sessionId && newDoc.session_id) {
+        onSessionSelect(newDoc.session_id);
+        await fetchSessions();
       }
-      await uploadDocument(file, sessionId);
+
       if (onDocumentsChange) onDocumentsChange();
       
       // Reset file input
