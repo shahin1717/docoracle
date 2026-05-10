@@ -1,3 +1,14 @@
+# backend/services/query_service.py
+import json
+import logging
+from pathlib import Path
+from typing import Generator   # ← This was missing!
+
+from backend.config import settings
+
+log = logging.getLogger(__name__)
+
+
 def stream_answer(
     query: str,
     doc_ids: list[str],

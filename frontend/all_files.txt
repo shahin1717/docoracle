@@ -1,0 +1,1719 @@
+
+===== ./tailwind.config.js =====
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,jsx}"
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+
+===== ./src/api/client.js =====
+
+const API_URL = "http://127.0.0.1:8000";
+
+// Helper to add auth token to requests
+function getHeaders(includeAuth = true) {
+  const headers = { "Content-Type": "application/json" };
+  if (includeAuth) {
+    const token = localStorage.getItem("token");
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return headers;
+}
+
+// ==================== AUTH ====================
+export async function loginUser(username, password) { 
+  const res = await fetch(`${API_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ 
+      username: username, 
+      password: password 
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Login failed");
+  }
+
+  const data = await res.json();
+  return data;
+}
+
+export async function registerUser(name, email, password) {
+  const res = await fetch(`${API_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // ИСПРАВЛЕНО: бэкенд ждет 'username', а не 'name'
+    body: JSON.stringify({ 
+      username: name, 
+      email: email, 
+      password: password 
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    // Обработка случая, когда detail — это массив (Pydantic validation error)
+    const message = Array.isArray(err.detail) ? err.detail[0].msg : err.detail;
+    throw new Error(message || "Registration failed");
+  }
+
+  return res.json();
+}
+
+export async function logoutUser() {
+  const res = await fetch(`${API_URL}/auth/logout`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    console.warn("Logout request failed, clearing local token anyway");
+  }
+
+  return res.ok;
+}
+
+// ==================== DOCUMENTS ====================
+export async function getDocuments() {
+  const res = await fetch(`${API_URL}/documents`, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch documents");
+  }
+
+  return res.json(); // [ { id, name, pages, uploaded_at, ... } ]
+}
+
+export async function uploadDocument(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = localStorage.getItem("token");
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_URL}/documents/upload`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Upload failed");
+  }
+
+  return res.json(); // { id, name, pages, ... }
+}
+
+export async function deleteDocument(docId) {
+  const res = await fetch(`${API_URL}/documents/${docId}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to delete document");
+  }
+
+  return res.ok;
+}
+
+// ==================== CHAT / QUERY ====================
+export async function queryDocuments(query, docIds = null) {
+  const payload = {
+    query,
+    doc_ids: docIds, // optional: filter by specific documents
+  };
+
+  const res = await fetch(`${API_URL}/chat/query`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new Error("Query failed");
+  }
+
+  return res;
+}
+
+// Stream helper for chat responses (Server-Sent Events)
+export async function streamQuery(query, docIds = null, onChunk, onError) {
+  try {
+    const payload = {
+      query,
+      doc_ids: docIds,
+    };
+
+    const token = localStorage.getItem("token");
+    const headers = { "Content-Type": "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${API_URL}/chat/query`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      throw new Error("Query failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+
+      // Process complete lines
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i];
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            onChunk(data);
+          } catch (e) {
+            console.error("Parse error:", e);
+          }
+        }
+      }
+
+      // Keep incomplete line in buffer
+      buffer = lines[lines.length - 1];
+    }
+
+    // Process final line if any
+    if (buffer.startsWith("data: ")) {
+      try {
+        const data = JSON.parse(buffer.slice(6));
+        onChunk(data);
+      } catch (e) {
+        console.error("Parse error:", e);
+      }
+    }
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
+// ==================== KNOWLEDGE GRAPH ====================
+export async function getDocumentGraph(docId) {
+  const res = await fetch(`${API_URL}/graph/${docId}`, {
+    method: "GET",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch graph");
+  }
+
+  return res.json(); // { nodes: [...], links: [...] }
+}
+
+// ==================== HEALTH ====================
+export async function checkHealth() {
+  const res = await fetch(`${API_URL}/health`);
+  return res.ok;
+}
+===== ./src/components/ChatPanel.jsx =====
+
+import { useState, useRef, useEffect } from "react";
+import { streamQuery } from "../api/client";
+import { Send, AlertCircle } from "lucide-react";
+
+export default function ChatPanel({ documents = [] }) {
+  const [messages, setMessages] = useState([
+    {
+      id: "welcome",
+      role: "assistant",
+      text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+      sources: [],
+      isStreaming: false,
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSendMessage() {
+    if (!input.trim() || loading) return;
+
+    // Disable RAG if no documents
+    if (documents.length === 0) {
+      setError("Please upload documents first to ask questions");
+      return;
+    }
+
+    const userMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      text: input,
+      sources: [],
+      isStreaming: false,
+    };
+
+    // Add user message
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setLoading(true);
+    setError(null);
+
+    // Create assistant message placeholder
+    const assistantId = (Date.now() + 1).toString();
+    const assistantMessage = {
+      id: assistantId,
+      role: "assistant",
+      text: "",
+      sources: [],
+      isStreaming: true,
+    };
+
+    setMessages((prev) => [...prev, assistantMessage]);
+
+    try {
+      await streamQuery(
+        input,
+        documents.map((d) => d.id),
+        (chunk) => {
+          // Update assistant message as chunks arrive
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === assistantId) {
+                if (chunk.type === "content") {
+                  return {
+                    ...msg,
+                    text: msg.text + (chunk.content || ""),
+                  };
+                } else if (chunk.type === "sources") {
+                  return {
+                    ...msg,
+                    sources: chunk.sources || [],
+                  };
+                }
+              }
+              return msg;
+            })
+          );
+        },
+        (err) => {
+          setError(err.message);
+          console.error("Stream error:", err);
+        }
+      );
+
+      // Mark as done streaming
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === assistantId ? { ...msg, isStreaming: false } : msg
+        )
+      );
+    } catch (err) {
+      setError(err.message);
+      console.error("Query error:", err);
+
+      // Remove assistant message on error
+      setMessages((prev) => prev.filter((msg) => msg.id !== assistantId));
+    } finally {
+      setLoading(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && e.ctrlKey) {
+      handleSendMessage();
+    }
+  };
+
+  return (
+    <main className="flex-1 flex flex-col bg-[#0b0b12]">
+      {/* Top Bar */}
+      <div className="h-[72px] border-b border-white/10 px-8 flex items-center justify-between bg-[#0d0d16]">
+        <div>
+          <h2 className="font-semibold text-lg">AI Workspace</h2>
+          <p className="text-sm text-white/40">
+            {documents.length > 0
+              ? `${documents.length} document${documents.length !== 1 ? "s" : ""} loaded`
+              : "Upload documents to start chatting"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm transition">
+            Export Chat
+          </button>
+
+          <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-medium">
+            A
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-3xl rounded-2xl px-5 py-4 border ${
+                message.role === "user"
+                  ? "bg-violet-600 border-violet-500"
+                  : "bg-white/[0.04] border-white/10"
+              }`}
+            >
+              <p className="text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
+                {message.text}
+                {message.isStreaming && (
+                  <span className="ml-1 inline-block w-2 h-4 bg-white/40 animate-pulse" />
+                )}
+              </p>
+
+              {message.sources && message.sources.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {message.sources.map((source, i) => (
+                    <div
+                      key={i}
+                      className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1"
+                    >
+                      {typeof source === "string" ? source : source.name || source}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="border-t border-white/10 p-6 bg-[#0d0d16]">
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-4">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              documents.length === 0
+                ? "Upload documents first..."
+                : "Ask something about your documents... (Ctrl+Enter to send)"
+            }
+            disabled={loading || documents.length === 0}
+            className="w-full bg-transparent outline-none resize-none text-sm text-white placeholder:text-white/30 disabled:opacity-50 disabled:cursor-not-allowed min-h-[80px]"
+          />
+
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center gap-3 text-xs text-white/30">
+              <span>RAG Enabled</span>
+              <span>•</span>
+              <span>Knowledge Graph Active</span>
+            </div>
+
+            <button
+              onClick={handleSendMessage}
+              disabled={loading || !input.trim() || documents.length === 0}
+              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              {loading ? "Thinking..." : "Send"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+===== ./src/components/CitationCard.jsx =====
+
+
+===== ./src/components/GraphViewer.jsx =====
+
+import { useState, useEffect } from "react";
+import { getDocumentGraph } from "../api/client";
+import { AlertCircle } from "lucide-react";
+
+export default function GraphViewer({ documents = [] }) {
+  const [selectedDocId, setSelectedDocId] = useState(null);
+  const [graphData, setGraphData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [entities, setEntities] = useState([]);
+
+  useEffect(() => {
+    if (selectedDocId) {
+      fetchGraph(selectedDocId);
+    } else if (documents.length > 0) {
+      setSelectedDocId(documents[0].id);
+    }
+  }, [selectedDocId, documents]);
+
+  async function fetchGraph(docId) {
+    setLoading(true);
+    setError(null);
+    try {
+      const graph = await getDocumentGraph(docId);
+      setGraphData(graph);
+
+      // Extract unique entities
+      const entitySet = new Set();
+      if (graph.nodes) {
+        graph.nodes.forEach((node) => {
+          if (node.label || node.name) {
+            entitySet.add(node.label || node.name);
+          }
+        });
+      }
+      setEntities(Array.from(entitySet).slice(0, 10)); // Top 10
+    } catch (err) {
+      setError(err.message);
+      console.error("Failed to fetch graph:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (documents.length === 0) {
+    return (
+      <aside className="w-[360px] border-l border-white/10 bg-[#11111b] hidden xl:flex flex-col items-center justify-center">
+        <div className="text-center p-8">
+          <p className="text-sm text-white/40 mb-2">No documents uploaded</p>
+          <p className="text-xs text-white/20">
+            Upload documents to see knowledge graphs
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="w-[360px] border-l border-white/10 bg-[#11111b] hidden xl:flex flex-col">
+      <div className="p-5 border-b border-white/10">
+        <h2 className="font-semibold mb-1">Knowledge Graph</h2>
+        <p className="text-sm text-white/40">
+          Relationships extracted from documents
+        </p>
+      </div>
+
+      {/* Document Selector */}
+      {documents.length > 1 && (
+        <div className="px-5 py-3 border-b border-white/10">
+          <select
+            value={selectedDocId || ""}
+            onChange={(e) => setSelectedDocId(parseInt(e.target.value))}
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50 transition"
+          >
+            {documents.map((doc) => (
+              <option key={doc.id} value={doc.id}>
+                {doc.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="flex-1 p-5 overflow-y-auto space-y-5">
+        {error && (
+          <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin">
+              <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full" />
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Detected Entities */}
+            <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5">
+              <h3 className="text-sm font-medium mb-4">Detected Entities</h3>
+
+              {entities.length === 0 ? (
+                <p className="text-xs text-white/40">
+                  No entities extracted yet. The graph will update as you query documents.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {entities.map((entity) => (
+                    <span
+                      key={entity}
+                      className="text-xs px-3 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20"
+                    >
+                      {entity}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Graph Preview */}
+            <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5">
+              <h3 className="text-sm font-medium mb-4">Graph Structure</h3>
+
+              {graphData && graphData.nodes ? (
+                <div className="space-y-2 text-xs text-white/60">
+                  <div>
+                    <span className="text-white/80">Nodes:</span> {graphData.nodes.length}
+                  </div>
+                  <div>
+                    <span className="text-white/80">Relationships:</span>{" "}
+                    {graphData.links ? graphData.links.length : 0}
+                  </div>
+
+                  {/* Simple ASCII graph preview */}
+                  <div className="mt-4 p-3 bg-white/5 rounded-lg font-mono text-[10px] text-white/40 max-h-[120px] overflow-auto">
+                    {graphData.nodes.slice(0, 5).map((node, i) => (
+                      <div key={i}>
+                        → {node.label || node.name || `Node ${i}`}
+                      </div>
+                    ))}
+                    {graphData.nodes.length > 5 && (
+                      <div>... and {graphData.nodes.length - 5} more</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-[120px] rounded-xl border border-dashed border-white/10 flex items-center justify-center text-white/30 text-sm">
+                  Graph loading...
+                </div>
+              )}
+            </div>
+
+            {/* Graph Stats */}
+            {graphData && (
+              <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 text-xs text-white/60">
+                <p className="text-white/80 font-medium mb-2">Graph Type</p>
+                <p>{graphData.type || "Knowledge Graph"}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+===== ./src/components/DocumentSidebar.jsx =====
+
+import { useState, useEffect, useRef } from "react";
+import { getDocuments, uploadDocument, deleteDocument } from "../api/client";
+import { FileText, Trash2, Upload } from "lucide-react";
+
+export default function DocumentSidebar() {
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Fetch documents on mount
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  async function fetchDocuments() {
+    setLoading(true);
+    setError(null);
+    try {
+      const docs = await getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      setError(err.message);
+      console.error("Failed to fetch documents:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const newDoc = await uploadDocument(file);
+      setDocuments([newDoc, ...documents]);
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (err) {
+      setError(err.message);
+      console.error("Upload failed:", err);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleDeleteDocument(docId) {
+    if (!window.confirm("Are you sure you want to delete this document?")) {
+      return;
+    }
+
+    try {
+      await deleteDocument(docId);
+      setDocuments(documents.filter((doc) => doc.id !== docId));
+    } catch (err) {
+      setError(err.message);
+      console.error("Delete failed:", err);
+    }
+  }
+
+  const getFileIcon = (filename) => {
+    const ext = filename.split(".").pop().toLowerCase();
+    const iconClass = "w-6 h-6";
+
+    switch (ext) {
+      case "pdf":
+        return <span className={`${iconClass} text-red-400`}>📄</span>;
+      case "docx":
+      case "doc":
+        return <span className={`${iconClass} text-blue-400`}>📘</span>;
+      case "pptx":
+      case "ppt":
+        return <span className={`${iconClass} text-orange-400`}>📊</span>;
+      case "md":
+        return <span className={`${iconClass} text-gray-400`}>#</span>;
+      default:
+        return <FileText className={`${iconClass} text-gray-400`} />;
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return "Today";
+    if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  return (
+    <aside className="w-[320px] border-r border-white/10 bg-[#11111b] flex flex-col">
+      {/* Logo */}
+      <div className="px-6 py-5 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center font-bold text-lg">
+            D
+          </div>
+          <div>
+            <h1 className="font-semibold text-lg">DocOracle</h1>
+            <p className="text-xs text-white/40">Local AI Workspace</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Upload Button */}
+      <div className="p-5 border-b border-white/10">
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 transition rounded-xl py-3 font-medium flex items-center justify-center gap-2"
+        >
+          <Upload className="w-4 h-4" />
+          {uploading ? "Uploading..." : "+ Upload Document"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileUpload}
+          accept=".pdf,.docx,.doc,.pptx,.ppt,.md,.txt"
+          className="hidden"
+        />
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="mx-4 mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-sm text-red-300">
+          {error}
+        </div>
+      )}
+
+      {/* Documents List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-medium text-white/80">Your Documents</h2>
+          <span className="text-xs text-white/30">{documents.length} files</span>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin">
+              <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full" />
+            </div>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-12 text-white/30">
+            <p className="text-sm">No documents yet</p>
+            <p className="text-xs">Upload one to get started</p>
+          </div>
+        ) : (
+          documents.map((doc) => (
+            <div
+              key={doc.id}
+              className="bg-white/[0.04] hover:bg-white/[0.07] transition border border-white/10 rounded-2xl p-4 cursor-pointer group"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="mt-1">{getFileIcon(doc.name)}</div>
+                  <div className="flex-1">
+                    <h3 className="font-medium text-sm mb-1 break-all line-clamp-2 group-hover:text-violet-300 transition">
+                      {doc.name}
+                    </h3>
+                    <p className="text-xs text-white/40">{doc.pages || "?"} pages</p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleDeleteDocument(doc.id)}
+                  className="opacity-0 group-hover:opacity-100 transition"
+                >
+                  <Trash2 className="w-4 h-4 text-red-400 hover:text-red-300" />
+                </button>
+              </div>
+
+              <div className="mt-3 text-xs text-white/30">
+                {formatDate(doc.uploaded_at || new Date().toISOString())}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </aside>
+  );
+}
+
+===== ./src/context/AuthContext.jsx =====
+
+import { createContext, useContext, useState, useEffect } from "react";
+
+const AuthContext = createContext();
+
+export function AuthProvider({ children }) {
+  const [token, setToken] = useState(() => {
+    // Initialize from localStorage
+    return localStorage.getItem("token") || null;
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState(!!token);
+
+  // Update isAuthenticated when token changes
+  useEffect(() => {
+    setIsAuthenticated(!!token);
+    if (token) {
+      localStorage.setItem("token", token);
+    } else {
+      localStorage.removeItem("token");
+    }
+  }, [token]);
+
+  const login = (jwt) => {
+    if (typeof jwt === "object") {
+      // Handle both { access_token: "..." } and just "token"
+      const actualToken = jwt.access_token || jwt.token || jwt;
+      setToken(actualToken);
+    } else {
+      setToken(jwt);
+    }
+  };
+
+  const logout = () => {
+    setToken(null);
+    localStorage.removeItem("token");
+  };
+
+  const value = {
+    token,
+    isAuthenticated,
+    login,
+    logout,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+  return context;
+};
+
+===== ./src/main.jsx =====
+
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import "./index.css";
+import App from "./App.jsx";
+import { BrowserRouter } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+
+createRoot(document.getElementById("root")).render(
+  <StrictMode>
+    <AuthProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </AuthProvider>
+  </StrictMode>
+);
+===== ./src/pages/Register.jsx =====
+
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { registerUser, loginUser } from "../api/client";
+import { AlertCircle, Eye, EyeOff, CheckCircle } from "lucide-react";
+
+export default function Register() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  // Password validation
+  const passwordStrength = {
+    hasMinLength: password.length >= 8,
+    hasUpperCase: /[A-Z]/.test(password),
+    hasLowerCase: /[a-z]/.test(password),
+    hasNumbers: /\d/.test(password),
+  };
+
+  const isPasswordStrong =
+    Object.values(passwordStrength).filter(Boolean).length >= 3;
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    setError("");
+    setSuccess(false);
+    setLoading(true);
+
+    try {
+      // Validate inputs
+      if (!name || !email || !password || !confirmPassword) {
+        throw new Error("Please fill in all fields");
+      }
+
+      if (name.trim().length < 2) {
+        throw new Error("Name must be at least 2 characters");
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error("Please enter a valid email");
+      }
+
+      if (password.length < 8) {
+        throw new Error("Password must be at least 8 characters");
+      }
+
+      if (password !== confirmPassword) {
+        throw new Error("Passwords do not match");
+      }
+
+      if (!isPasswordStrong) {
+        throw new Error(
+          "Password must contain uppercase, lowercase, and numbers"
+        );
+      }
+
+      // Register
+      await registerUser(name, email, password);
+      setSuccess(true);
+
+      // Auto-login after successful registration
+      setTimeout(async () => {
+      try {
+        // Входим по 'name', так как именно оно стало 'username' в базе
+        const data = await loginUser(name, password); 
+        login(data.access_token || data.token || data);
+        navigate("/app");
+      } catch (err) {
+        navigate("/login");
+      }
+    }, 1500);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12] flex flex-col items-center justify-center px-4">
+        <div className="relative z-10 text-center max-w-md">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 border border-green-500/30 mb-6 animate-bounce">
+            <CheckCircle className="w-8 h-8 text-green-400" />
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Account Created!
+          </h2>
+          <p className="text-white/60 mb-4">
+            Welcome to DocOracle. Redirecting you to the workspace...
+          </p>
+
+          <div className="inline-block">
+            <div className="animate-spin">
+              <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12] flex flex-col items-center justify-center px-4">
+      {/* Background glow */}
+      <div className="absolute inset-0 bg-gradient-to-t from-violet-600/10 via-transparent to-transparent pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 flex items-center justify-center font-bold text-xl text-white">
+              D
+            </div>
+            <div className="text-left">
+              <h1 className="font-bold text-2xl text-white">DocOracle</h1>
+              <p className="text-xs text-white/40">Local AI Workspace</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Card */}
+        <div className="bg-white/5 border border-white/10 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Create Account</h2>
+          <p className="text-sm text-white/60 mb-6">
+            Join DocOracle to start using AI-powered document analysis
+          </p>
+
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleRegister} className="space-y-4">
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                disabled={loading}
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                disabled={loading}
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+
+              {/* Password Strength Indicator */}
+              {password && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        passwordStrength.hasMinLength
+                          ? "bg-green-500"
+                          : "bg-white/20"
+                      }`}
+                    />
+                    <span className="text-white/60">At least 8 characters</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        passwordStrength.hasUpperCase
+                          ? "bg-green-500"
+                          : "bg-white/20"
+                      }`}
+                    />
+                    <span className="text-white/60">Uppercase letter</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        passwordStrength.hasLowerCase
+                          ? "bg-green-500"
+                          : "bg-white/20"
+                      }`}
+                    />
+                    <span className="text-white/60">Lowercase letter</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        passwordStrength.hasNumbers
+                          ? "bg-green-500"
+                          : "bg-white/20"
+                      }`}
+                    />
+                    <span className="text-white/60">Number</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading || !isPasswordStrong}
+              className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium py-3 rounded-xl text-white mt-6"
+            >
+              {loading ? "Creating Account..." : "Create Account"}
+            </button>
+          </form>
+
+          {/* Sign In Link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-white/60">
+              Already have an account?{" "}
+              <Link
+                to="/login"
+                className="text-violet-400 hover:text-violet-300 font-medium transition"
+              >
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-white/30 mt-6">
+          By creating an account, you agree to our Terms of Service
+        </p>
+      </div>
+    </div>
+  );
+}
+
+===== ./src/pages/Login.jsx =====
+
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { loginUser } from "../api/client";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
+
+export default function Login() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      // Validate inputs
+      if (!username || !password) {
+        throw new Error("Please fill in all fields");
+      }
+
+      // Call API
+      const data = await loginUser(username, password);
+
+      // Store token and redirect
+      login(data.access_token || data.token || data);
+      navigate("/app");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12] flex flex-col items-center justify-center px-4">
+      {/* Background glow */}
+      <div className="absolute inset-0 bg-gradient-to-t from-violet-600/10 via-transparent to-transparent pointer-events-none" />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-violet-700 flex items-center justify-center font-bold text-xl text-white">
+              D
+            </div>
+            <div className="text-left">
+              <h1 className="font-bold text-2xl text-white">DocOracle</h1>
+              <p className="text-xs text-white/40">Local AI Workspace</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Card */}
+        <div className="bg-white/5 border border-white/10 backdrop-blur-sm rounded-2xl p-8 shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+          <p className="text-sm text-white/60 mb-6">
+            Sign in to your DocOracle account
+          </p>
+
+          {/* Error Alert */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-300">{error}</p>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Email
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                disabled={loading}
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium py-3 rounded-xl text-white mt-6"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+          </form>
+
+          {/* Sign Up Link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-white/60">
+              Don't have an account?{" "}
+              <Link
+                to="/register"
+                className="text-violet-400 hover:text-violet-300 font-medium transition"
+              >
+                Sign up
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-white/30 mt-6">
+          By signing in, you agree to our Terms of Service
+        </p>
+      </div>
+    </div>
+  );
+}
+
+===== ./src/pages/AppPage.jsx =====
+
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import DocumentSidebar from "../components/DocumentSidebar";
+import ChatPanel from "../components/ChatPanel";
+import GraphViewer from "../components/GraphViewer";
+import { getDocuments, logoutUser } from "../api/client";
+import { LogOut } from "lucide-react";
+
+export default function AppPage() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const [documents, setDocuments] = useState([]);
+
+  // Fetch documents on mount
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+
+  async function loadDocuments() {
+    try {
+      const docs = await getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      console.error("Failed to load documents:", err);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      logout();
+      navigate("/login");
+    }
+  }
+
+  return (
+    <div className="h-screen bg-[#0b0b12] text-white flex overflow-hidden">
+      {/* Left Sidebar - Documents */}
+      <DocumentSidebar />
+
+      {/* Center - Chat */}
+      <ChatPanel documents={documents} />
+
+      {/* Right Panel - Knowledge Graph */}
+      <GraphViewer documents={documents} />
+
+      {/* Logout Button (floating) */}
+      <button
+        onClick={handleLogout}
+        className="fixed bottom-6 right-6 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded-full p-3 transition text-red-300"
+        title="Logout"
+      >
+        <LogOut className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
+===== ./src/pages/Landing.jsx =====
+
+import { useEffect } from "react"; 
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+import { ArrowRight, Zap, BarChart3, Network } from "lucide-react";
+
+export default function Landing() {
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/app");
+    }
+  }, [isAuthenticated, navigate]);
+
+  if (isAuthenticated) {
+    return null;
+  }
+
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12]">
+      {/* Background glow */}
+      <div className="absolute inset-0 bg-gradient-to-t from-violet-600/10 via-transparent to-transparent pointer-events-none" />
+
+      <div className="relative z-10">
+        {/* Navigation */}
+        <nav className="border-b border-white/10 backdrop-blur-md sticky top-0">
+          <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center font-bold text-sm">
+                D
+              </div>
+              <span className="font-bold text-white">DocOracle</span>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => navigate("/login")}
+                className="px-4 py-2 text-white/80 hover:text-white transition"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => navigate("/register")}
+                className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white transition"
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        {/* Hero Section */}
+        <section className="max-w-6xl mx-auto px-6 py-32 text-center">
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
+            Chat with Your
+            <br />
+            <span className="bg-gradient-to-r from-violet-400 via-violet-500 to-violet-600 bg-clip-text text-transparent">
+              Documents
+            </span>
+          </h1>
+
+          <p className="text-lg text-white/60 max-w-2xl mx-auto mb-8">
+            DocOracle uses advanced AI to extract knowledge from your documents.
+            Upload PDFs, Word docs, and presentations. Get instant answers with
+            citations.
+          </p>
+
+          <div className="flex gap-4 justify-center mb-16">
+            <button
+              onClick={() => navigate("/register")}
+              className="px-8 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white flex items-center gap-2 transition"
+            >
+              Start Free <ArrowRight className="w-4 h-4" />
+            </button>
+            <button className="px-8 py-3 border border-white/20 hover:border-white/40 rounded-lg font-medium text-white transition">
+              Learn More
+            </button>
+          </div>
+
+          {/* Feature Preview */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-2 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-violet-600/20 to-transparent rounded-xl p-12 flex items-center justify-center min-h-[400px] text-white/30">
+              <p className="text-center">DocOracle Interface Preview</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Features Section */}
+        <section className="max-w-6xl mx-auto px-6 py-24">
+          <h2 className="text-3xl font-bold text-white text-center mb-16">
+            Powerful Features
+          </h2>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Feature 1 */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
+              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
+                <Zap className="w-6 h-6 text-violet-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                RAG-Powered
+              </h3>
+              <p className="text-white/60">
+                Retrieval-Augmented Generation ensures answers are grounded in
+                your actual documents.
+              </p>
+            </div>
+
+            {/* Feature 2 */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
+              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
+                <BarChart3 className="w-6 h-6 text-violet-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Knowledge Extraction
+              </h3>
+              <p className="text-white/60">
+                Automatically extract entities, relationships, and insights from
+                your documents.
+              </p>
+            </div>
+
+            {/* Feature 3 */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
+              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
+                <Network className="w-6 h-6 text-violet-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">
+                Knowledge Graphs
+              </h3>
+              <p className="text-white/60">
+                Visualize relationships between concepts and entities across your
+                documents.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Supported Formats */}
+        <section className="max-w-6xl mx-auto px-6 py-16 text-center">
+          <h3 className="text-lg font-semibold text-white/80 mb-6">
+            Supported File Types
+          </h3>
+          <div className="flex flex-wrap gap-4 justify-center">
+            {["PDF", "Word (.docx)", "PowerPoint", "Markdown"].map((fmt) => (
+              <div
+                key={fmt}
+                className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-white/70"
+              >
+                {fmt}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="max-w-4xl mx-auto px-6 py-24 text-center">
+          <h2 className="text-3xl font-bold text-white mb-4">
+            Ready to supercharge your research?
+          </h2>
+          <p className="text-white/60 mb-8">
+            Join thousands of users leveraging AI to extract knowledge from their
+            documents.
+          </p>
+          <button
+            onClick={() => navigate("/register")}
+            className="px-8 py-4 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white text-lg transition"
+          >
+            Get Started Free
+          </button>
+        </section>
+
+        {/* Footer */}
+        <footer className="border-t border-white/10 py-8 text-center text-white/40 text-sm">
+          <p>© 2024 DocOracle. All rights reserved.</p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+===== ./src/App.jsx =====
+
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+
+import Landing from "./pages/Landing";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import AppPage from "./pages/AppPage";
+
+// Protected Route Component
+function ProtectedRoute({ children }) {
+  const { token } = useAuth();
+  return token ? children : <Navigate to="/login" replace />;
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route
+        path="/app"
+        element={
+          <ProtectedRoute>
+            <AppPage />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
+  );
+}
+===== ./postcss.config.js =====
+
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+===== ./vite.config.js =====
+
+<<<<<<< HEAD
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+=======
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+})
+>>>>>>> main
+
+===== ./eslint.config.js =====
+
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{js,jsx}'],
+    extends: [
+      js.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      globals: globals.browser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
+])

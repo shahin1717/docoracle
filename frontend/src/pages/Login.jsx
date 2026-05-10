@@ -73,16 +73,16 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
-            {/* Email */}
+            {/* Username - CHANGED HERE */}
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">
-                Email
+                Username
               </label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="JohnDoe  "     
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
                 disabled={loading}
               />

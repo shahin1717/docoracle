@@ -1,8 +1,7 @@
 import { useEffect } from "react"; 
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-import { ArrowRight, Zap, BarChart3, Network } from "lucide-react";
+import { ArrowRight, Zap, BarChart3, Network, ChevronDown } from "lucide-react";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -14,37 +13,40 @@ export default function Landing() {
     }
   }, [isAuthenticated, navigate]);
 
-  if (isAuthenticated) {
-    return null;
-  }
+  if (isAuthenticated) return null;
 
+  const scrollToFeatures = () => {
+    document.getElementById("features").scrollIntoView({
+      behavior: "smooth",
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12]">
+    <div className="min-h-screen bg-gradient-to-br from-[#0b0b12] via-[#1a1a2e] to-[#0b0b12] overflow-hidden">
       {/* Background glow */}
       <div className="absolute inset-0 bg-gradient-to-t from-violet-600/10 via-transparent to-transparent pointer-events-none" />
 
       <div className="relative z-10">
         {/* Navigation */}
-        <nav className="border-b border-white/10 backdrop-blur-md sticky top-0">
+        <nav className="border-b border-white/10 backdrop-blur-md sticky top-0 z-50">
           <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center font-bold text-sm">
+              <div className="w-8 h-8 rounded-xl bg-violet-600 flex items-center justify-center font-bold text-sm shadow-lg shadow-violet-500/50">
                 D
               </div>
-              <span className="font-bold text-white">DocOracle</span>
+              <span className="font-bold text-xl text-white">DocOracle</span>
             </div>
 
             <div className="flex items-center gap-4">
               <button
                 onClick={() => navigate("/login")}
-                className="px-4 py-2 text-white/80 hover:text-white transition"
+                className="px-5 py-2 text-white/80 hover:text-white transition font-medium"
               >
                 Sign In
               </button>
               <button
                 onClick={() => navigate("/register")}
-                className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white transition"
+                className="px-6 py-2 bg-violet-600 hover:bg-violet-700 rounded-xl font-medium text-white transition shadow-lg shadow-violet-500/30"
               >
                 Get Started
               </button>
@@ -53,102 +55,101 @@ export default function Landing() {
         </nav>
 
         {/* Hero Section */}
-        <section className="max-w-6xl mx-auto px-6 py-32 text-center">
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
-            Chat with Your
-            <br />
-            <span className="bg-gradient-to-r from-violet-400 via-violet-500 to-violet-600 bg-clip-text text-transparent">
+        <section className="max-w-6xl mx-auto px-6 pt-24 pb-20 text-center">
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white leading-tight mb-6">
+            Chat with Your<br />
+            <span className="bg-gradient-to-r from-violet-400 via-violet-500 to-fuchsia-500 bg-clip-text text-transparent">
               Documents
             </span>
           </h1>
 
-          <p className="text-lg text-white/60 max-w-2xl mx-auto mb-8">
-            DocOracle uses advanced AI to extract knowledge from your documents.
-            Upload PDFs, Word docs, and presentations. Get instant answers with
-            citations.
+          <p className="text-xl text-white/70 max-w-2xl mx-auto mb-10">
+            Upload PDFs, Word docs, presentations, and Markdown. 
+            Get intelligent answers powered by local AI with citations and knowledge graphs.
           </p>
 
-          <div className="flex gap-4 justify-center mb-16">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <button
               onClick={() => navigate("/register")}
-              className="px-8 py-3 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white flex items-center gap-2 transition"
+              className="px-8 py-4 bg-violet-600 hover:bg-violet-700 rounded-2xl font-semibold text-lg flex items-center justify-center gap-3 transition group"
             >
-              Start Free <ArrowRight className="w-4 h-4" />
+              Start Free 
+              <ArrowRight className="group-hover:translate-x-1 transition" />
             </button>
-            <button className="px-8 py-3 border border-white/20 hover:border-white/40 rounded-lg font-medium text-white transition">
+
+            <button
+              onClick={scrollToFeatures}
+              className="px-8 py-4 border border-white/30 hover:border-white/60 rounded-2xl font-medium text-lg flex items-center justify-center gap-2 transition"
+            >
               Learn More
             </button>
           </div>
 
-          {/* Feature Preview */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-2 backdrop-blur-sm">
-            <div className="bg-gradient-to-br from-violet-600/20 to-transparent rounded-xl p-12 flex items-center justify-center min-h-[400px] text-white/30">
-              <p className="text-center">DocOracle Interface Preview</p>
+          {/* Preview */}
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-3 backdrop-blur-xl shadow-2xl">
+            <div className="bg-[#0f0f1a] rounded-2xl aspect-video flex items-center justify-center border border-white/10">
+              <div className="text-center">
+                <p className="text-white/40 text-lg mb-2">✨ Interface Preview</p>
+                <p className="text-white/20 text-sm">DocOracle AI Workspace</p>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Features Section */}
-        <section className="max-w-6xl mx-auto px-6 py-24">
-          <h2 className="text-3xl font-bold text-white text-center mb-16">
-            Powerful Features
-          </h2>
+        <section id="features" className="max-w-6xl mx-auto px-6 py-24">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-white mb-4">
+              Powerful Features
+            </h2>
+            <p className="text-white/60 text-lg">
+              Built for researchers, students, and professionals
+            </p>
+          </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
-              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
-                <Zap className="w-6 h-6 text-violet-400" />
+            <div className="group bg-white/5 border border-white/10 hover:border-violet-500/40 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1">
+              <div className="w-14 h-14 bg-violet-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition">
+                <Zap className="w-7 h-7 text-violet-400" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">
-                RAG-Powered
-              </h3>
-              <p className="text-white/60">
-                Retrieval-Augmented Generation ensures answers are grounded in
-                your actual documents.
+              <h3 className="text-2xl font-semibold text-white mb-3">RAG-Powered Chat</h3>
+              <p className="text-white/70">
+                Answers are always grounded in your documents with accurate citations.
               </p>
             </div>
 
-            {/* Feature 2 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
-              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
-                <BarChart3 className="w-6 h-6 text-violet-400" />
+            <div className="group bg-white/5 border border-white/10 hover:border-violet-500/40 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1">
+              <div className="w-14 h-14 bg-violet-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition">
+                <BarChart3 className="w-7 h-7 text-violet-400" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">
-                Knowledge Extraction
-              </h3>
-              <p className="text-white/60">
-                Automatically extract entities, relationships, and insights from
-                your documents.
+              <h3 className="text-2xl font-semibold text-white mb-3">Knowledge Extraction</h3>
+              <p className="text-white/70">
+                Automatically detects entities, concepts, and relationships from your files.
               </p>
             </div>
 
-            {/* Feature 3 */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-8 hover:border-violet-500/30 transition">
-              <div className="w-12 h-12 bg-violet-500/20 rounded-lg flex items-center justify-center mb-4">
-                <Network className="w-6 h-6 text-violet-400" />
+            <div className="group bg-white/5 border border-white/10 hover:border-violet-500/40 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-1">
+              <div className="w-14 h-14 bg-violet-500/10 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition">
+                <Network className="w-7 h-7 text-violet-400" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">
-                Knowledge Graphs
-              </h3>
-              <p className="text-white/60">
-                Visualize relationships between concepts and entities across your
-                documents.
+              <h3 className="text-2xl font-semibold text-white mb-3">Interactive Knowledge Graph</h3>
+              <p className="text-white/70">
+                Visualize connections between ideas across all your documents.
               </p>
             </div>
           </div>
         </section>
 
         {/* Supported Formats */}
-        <section className="max-w-6xl mx-auto px-6 py-16 text-center">
-          <h3 className="text-lg font-semibold text-white/80 mb-6">
-            Supported File Types
+        <section className="max-w-6xl mx-auto px-6 py-20 text-center border-t border-white/10">
+          <h3 className="text-lg font-semibold text-white/80 mb-8">
+            Supported File Formats
           </h3>
           <div className="flex flex-wrap gap-4 justify-center">
-            {["PDF", "Word (.docx)", "PowerPoint", "Markdown"].map((fmt) => (
+            {["PDF", "DOCX", "PPTX", "Markdown (.md)", "TXT"].map((fmt) => (
               <div
                 key={fmt}
-                className="px-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-white/70"
+                className="px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-white/80 hover:bg-white/10 transition"
               >
                 {fmt}
               </div>
@@ -156,26 +157,25 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="max-w-4xl mx-auto px-6 py-24 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to supercharge your research?
+        {/* Final CTA */}
+        <section className="max-w-4xl mx-auto px-6 py-28 text-center">
+          <h2 className="text-4xl font-bold text-white mb-6">
+            Ready to unlock your documents?
           </h2>
-          <p className="text-white/60 mb-8">
-            Join thousands of users leveraging AI to extract knowledge from their
-            documents.
+          <p className="text-white/60 mb-10 text-lg">
+            Run everything locally. No data leaves your machine.
           </p>
           <button
             onClick={() => navigate("/register")}
-            className="px-8 py-4 bg-violet-600 hover:bg-violet-700 rounded-lg font-medium text-white text-lg transition"
+            className="px-10 py-5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:brightness-110 rounded-2xl font-semibold text-xl transition shadow-xl shadow-violet-500/30"
           >
             Get Started Free
           </button>
         </section>
 
         {/* Footer */}
-        <footer className="border-t border-white/10 py-8 text-center text-white/40 text-sm">
-          <p>© 2024 DocOracle. All rights reserved.</p>
+        <footer className="border-t border-white/10 py-10 text-center text-white/40 text-sm">
+          <p>© 2026 DocOracle. Built with ❤️ for local AI.</p>
         </footer>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { streamQuery } from "../api/client";
-import { Send, AlertCircle } from "lucide-react";
+import { Send, AlertCircle, Loader2 } from "lucide-react";
 
 export default function ChatPanel({ documents = [] }) {
   const [messages, setMessages] = useState([
@@ -12,9 +12,11 @@ export default function ChatPanel({ documents = [] }) {
       isStreaming: false,
     },
   ]);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -25,28 +27,19 @@ export default function ChatPanel({ documents = [] }) {
 
   async function handleSendMessage() {
     if (!input.trim() || loading) return;
-
-    // Disable RAG if no documents
     if (documents.length === 0) {
-      setError("Please upload documents first to ask questions");
+      setError("Please upload at least one document to start chatting.");
       return;
     }
 
     const userMessage = {
       id: Date.now().toString(),
       role: "user",
-      text: input,
+      text: input.trim(),
       sources: [],
       isStreaming: false,
     };
 
-    // Add user message
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-    setError(null);
-
-    // Create assistant message placeholder
     const assistantId = (Date.now() + 1).toString();
     const assistantMessage = {
       id: assistantId,
@@ -56,51 +49,66 @@ export default function ChatPanel({ documents = [] }) {
       isStreaming: true,
     };
 
-    setMessages((prev) => [...prev, assistantMessage]);
+    // Add messages
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    const currentInput = input.trim();
+    setInput("");
+    setLoading(true);
+    setError(null);
 
     try {
       await streamQuery(
-        input,
+        currentInput,
         documents.map((d) => d.id),
         (chunk) => {
-          // Update assistant message as chunks arrive
           setMessages((prev) =>
             prev.map((msg) => {
-              if (msg.id === assistantId) {
-                if (chunk.type === "content") {
-                  return {
-                    ...msg,
-                    text: msg.text + (chunk.content || ""),
-                  };
-                } else if (chunk.type === "sources") {
-                  return {
-                    ...msg,
-                    sources: chunk.sources || [],
-                  };
-                }
+              if (msg.id !== assistantId) return msg;
+
+              if (chunk.type === "token") {
+                return {
+                  ...msg,
+                  text: msg.text + (chunk.content || ""),
+                };
+              } 
+              else if (chunk.type === "sources") {
+                return {
+                  ...msg,
+                  sources: Array.isArray(chunk.content) ? chunk.content : [],
+                };
+              } 
+              else if (chunk.type === "error") {
+                setError(chunk.content);
+                return { ...msg, isStreaming: false };
+              } 
+              else if (chunk.type === "done") {
+                return { ...msg, isStreaming: false };
               }
+
               return msg;
             })
           );
         },
         (err) => {
-          setError(err.message);
           console.error("Stream error:", err);
+          setError(err.message || "Something went wrong while streaming response.");
+          
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, isStreaming: false, text: msg.text + "\n\n[Error occurred]" }
+                : msg
+            )
+          );
         }
       );
-
-      // Mark as done streaming
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantId ? { ...msg, isStreaming: false } : msg
-        )
-      );
     } catch (err) {
-      setError(err.message);
       console.error("Query error:", err);
+      setError(err.message || "Failed to get response from AI.");
 
-      // Remove assistant message on error
-      setMessages((prev) => prev.filter((msg) => msg.id !== assistantId));
+      setMessages((prev) =>
+        prev.filter((msg) => msg.id !== assistantId)
+      );
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -108,7 +116,8 @@ export default function ChatPanel({ documents = [] }) {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && e.ctrlKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
       handleSendMessage();
     }
   };
@@ -137,7 +146,7 @@ export default function ChatPanel({ documents = [] }) {
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
         {messages.map((message) => (
           <div
@@ -154,20 +163,31 @@ export default function ChatPanel({ documents = [] }) {
               <p className="text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
                 {message.text}
                 {message.isStreaming && (
-                  <span className="ml-1 inline-block w-2 h-4 bg-white/40 animate-pulse" />
+                  <span className="inline-flex items-center gap-1 ml-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  </span>
                 )}
               </p>
 
+              {/* Sources */}
               {message.sources && message.sources.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {message.sources.map((source, i) => (
-                    <div
-                      key={i}
-                      className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1"
-                    >
-                      {typeof source === "string" ? source : source.name || source}
-                    </div>
-                  ))}
+                <div className="mt-4">
+                  <p className="text-xs uppercase tracking-widest text-white/40 mb-2">
+                    Sources
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {message.sources.map((source, i) => (
+                      <div
+                        key={i}
+                        className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1.5 max-w-xs truncate"
+                        title={typeof source === "string" ? source : source.text?.slice(0, 100)}
+                      >
+                        {typeof source === "string"
+                          ? source
+                          : source.title || source.source_path || `Source ${i + 1}`}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -194,26 +214,34 @@ export default function ChatPanel({ documents = [] }) {
             placeholder={
               documents.length === 0
                 ? "Upload documents first..."
-                : "Ask something about your documents... (Ctrl+Enter to send)"
+                : "Ask a question about your documents... (Press Enter to send)"
             }
             disabled={loading || documents.length === 0}
-            className="w-full bg-transparent outline-none resize-none text-sm text-white placeholder:text-white/30 disabled:opacity-50 disabled:cursor-not-allowed min-h-[80px]"
+            className="w-full bg-transparent outline-none resize-none text-sm text-white placeholder:text-white/30 disabled:opacity-50 min-h-[80px] max-h-[200px]"
+            rows={3}
           />
 
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-3 text-xs text-white/30">
-              <span>RAG Enabled</span>
-              <span>•</span>
-              <span>Knowledge Graph Active</span>
+              <span>RAG + Knowledge Graph</span>
             </div>
 
             <button
               onClick={handleSendMessage}
               disabled={loading || !input.trim() || documents.length === 0}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition px-5 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2"
             >
-              <Send className="w-4 h-4" />
-              {loading ? "Thinking..." : "Send"}
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Thinking...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Send
+                </>
+              )}
             </button>
           </div>
         </div>

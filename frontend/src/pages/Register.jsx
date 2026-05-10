@@ -5,7 +5,7 @@ import { registerUser, loginUser } from "../api/client";
 import { AlertCircle, Eye, EyeOff, CheckCircle } from "lucide-react";
 
 export default function Register() {
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");   // changed from name
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,12 +36,12 @@ export default function Register() {
 
     try {
       // Validate inputs
-      if (!name || !email || !password || !confirmPassword) {
+      if (!username || !email || !password || !confirmPassword) {
         throw new Error("Please fill in all fields");
       }
 
-      if (name.trim().length < 2) {
-        throw new Error("Name must be at least 2 characters");
+      if (username.trim().length < 2) {
+        throw new Error("Username must be at least 2 characters");
       }
 
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -63,14 +63,13 @@ export default function Register() {
       }
 
       // Register
-      await registerUser(name, email, password);
+      await registerUser(username, email, password);   // changed here
       setSuccess(true);
 
       // Auto-login after successful registration
       setTimeout(async () => {
       try {
-        // Входим по 'name', так как именно оно стало 'username' в базе
-        const data = await loginUser(name, password); 
+        const data = await loginUser(username, password);   // changed here
         login(data.access_token || data.token || data);
         navigate("/app");
       } catch (err) {
@@ -145,16 +144,16 @@ export default function Register() {
 
           {/* Form */}
           <form onSubmit={handleRegister} className="space-y-4">
-            {/* Name */}
+            {/* Username - Only this part changed */}
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">
-                Full Name
+                Username
               </label>
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="John Doe"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your_username"
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/30 focus:outline-none focus:border-violet-500/50 focus:bg-white/10 transition"
                 disabled={loading}
               />
