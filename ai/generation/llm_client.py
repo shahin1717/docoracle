@@ -28,7 +28,7 @@ class LLMClient:
             "num_predict": 4096, 
             "top_p": 0.9,
         }
-        }, timeout=120)
+        }, timeout=1200)
         response.raise_for_status()
         return response.json()["message"]["content"]
 
@@ -51,7 +51,7 @@ class LLMClient:
             "num_predict": 4096,  
             "top_p": 0.9,
         }
-        }, stream=True, timeout=120)
+        }, stream=True, timeout=1200)
         response.raise_for_status()
 
         for line in response.iter_lines():

@@ -36,8 +36,9 @@ data/graphs/
 data/uploads/
 data/faiss_index/
 data/*.db
-data/app.db
-data/docs.db
+*.db
+app.db
+docs.db
 *.pdf
 txt.txt
 knowledge_graphs/
