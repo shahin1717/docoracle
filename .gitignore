@@ -23,6 +23,7 @@ share/python-wheels/
 MANIFEST
 __pycache__/
 *.pyc
+/backend/api/__pycache__/
 # Environment
 .env
 .venv/

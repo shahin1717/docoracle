@@ -7,14 +7,35 @@ echo "      DocOracle Full Startup"
 echo "======================================"
 
 # -------------------------------
+# Cleanup on exit
+# -------------------------------
+cleanup() {
+    echo ""
+    echo "🛑 Shutting down DocOracle..."
+    if [ -n "$BACKEND_PID" ]; then
+        kill $BACKEND_PID 2>/dev/null || true
+    fi
+    if [ -n "$FRONTEND_PID" ]; then
+        kill $FRONTEND_PID 2>/dev/null || true
+    fi
+    exit 0
+}
+trap cleanup SIGINT SIGTERM
+
+# -------------------------------
 # 1. Start application
 # -------------------------------
 echo "Ensuring Conda environment is active..."
 
-# Try to find conda and activate docoracle
+# Try to find conda and activate environment
 if command -v conda &> /dev/null; then
     eval "$(conda shell.bash hook)"
-    conda activate docoracle || echo "Warning: docoracle env not found"
+    
+    # Check if we should prompt or default
+    read -p "Enter your Conda environment name (default: docoracle): " ENV_NAME
+    ENV_NAME=${ENV_NAME:-docoracle}
+    
+    conda activate "$ENV_NAME" || echo "Warning: $ENV_NAME env not found"
 else
     echo "Warning: conda not found in PATH"
 fi
