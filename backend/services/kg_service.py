@@ -44,11 +44,16 @@ def build_knowledge_graph(document_id: str) -> None:
         g_store = GraphStore(str(settings.graphs_dir))
         g_store.save(graph, document_id)
 
-        doc.kg_ready = True
-        db.add(doc)
-        db.commit()
-
-        log.info(f"✅ Knowledge Graph built successfully for {document_id} ({graph.number_of_nodes()} nodes)")
+        try:
+            doc.kg_ready = True
+            db.add(doc)
+            db.commit()
+            log.info(f"✅ Knowledge Graph built successfully for {document_id} ({graph.number_of_nodes()} nodes)")
+        except Exception as update_err:
+            if "StaleDataError" in str(type(update_err)):
+                log.warning(f"Document {document_id} was deleted before KG could be saved.")
+            else:
+                raise update_err
 
     except Exception as e:
         log.exception(f"KG build failed for {document_id}")

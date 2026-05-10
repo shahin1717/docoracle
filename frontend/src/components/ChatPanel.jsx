@@ -2,12 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import { streamQuery, getChatSession } from "../api/client";
 import { Send, AlertCircle, Loader2 } from "lucide-react";
 
-export default function ChatPanel({ documents = [], sessionId, onSessionChange }) {
+export default function ChatPanel({ documents = [], sessionId, onSessionChange, pendingQuery, clearPendingQuery }) {
   const [messages, setMessages] = useState([
     {
       id: "welcome",
       role: "assistant",
-      text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+      text: "Welcome to DocOracle. Upload documents and select them to start chatting.",
       sources: [],
       isStreaming: false,
     },
@@ -25,6 +25,14 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Handle pending query from graph
+  useEffect(() => {
+    if (pendingQuery && !loading) {
+      handleSendMessage(pendingQuery);
+      clearPendingQuery();
+    }
+  }, [pendingQuery, loading]);
+
   // Load session when sessionId changes
   useEffect(() => {
     if (sessionId) {
@@ -34,7 +42,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
         {
           id: "welcome",
           role: "assistant",
-          text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+          text: "Welcome to DocOracle. Upload documents to this chat to begin.",
           sources: [],
           isStreaming: false,
         },
@@ -47,6 +55,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
       setLoading(true);
       setError(null);
       const session = await getChatSession(sessionId);
+
       const formattedMessages = session.messages.map((m) => ({
         id: m.id,
         role: m.role,
@@ -61,7 +70,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
           {
             id: "welcome",
             role: "assistant",
-            text: "Welcome to DocOracle. Upload documents and ask questions grounded in your own files.",
+            text: "Welcome to DocOracle. Upload documents to this chat to begin.",
             sources: [],
             isStreaming: false,
           },
@@ -75,17 +84,18 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
     }
   }
 
-  async function handleSendMessage() {
-    if (!input.trim() || loading) return;
+  async function handleSendMessage(overrideText = null) {
+    const textToSend = typeof overrideText === "string" ? overrideText : input;
+    if (!textToSend.trim() || loading) return;
     if (documents.length === 0) {
-      setError("Please upload at least one document to start chatting.");
+      setError("Please upload at least one document to chat with.");
       return;
     }
 
     const userMessage = {
       id: Date.now().toString(),
       role: "user",
-      text: input.trim(),
+      text: textToSend.trim(),
       sources: [],
       isStreaming: false,
     };
@@ -105,15 +115,16 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
       return [...filtered, userMessage, assistantMessage];
     });
 
-    const currentInput = input.trim();
-    setInput("");
+    const currentInput = textToSend.trim();
+    if (typeof overrideText !== "string") {
+      setInput("");
+    }
     setLoading(true);
     setError(null);
 
     try {
       await streamQuery(
         currentInput,
-        documents.map((d) => d.id),
         sessionId,
         (chunk) => {
           if (chunk.type === "session") {
@@ -182,22 +193,34 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange }
   return (
     <main className="flex-1 flex flex-col bg-[#0b0b12]">
       {/* Top Bar */}
-      <div className="h-[72px] border-b border-white/10 px-8 flex items-center justify-between bg-[#0d0d16]">
-        <div>
+      <div className="border-b border-white/10 px-8 py-4 flex items-start justify-between bg-[#0d0d16] min-h-[72px]">
+        <div className="flex-1">
           <h2 className="font-semibold text-lg">AI Workspace</h2>
-          <p className="text-sm text-white/40">
-            {documents.length > 0
-              ? `${documents.length} document${documents.length !== 1 ? "s" : ""} loaded`
-              : "Upload documents to start chatting"}
-          </p>
+          
+          <div className="mt-2">
+            <div className="flex flex-wrap gap-2">
+              <span className="text-xs text-white/40 py-1.5">Workspace Documents:</span>
+              {documents.length === 0 ? (
+                <span className="text-xs text-white/20 py-1.5">None</span>
+              ) : (
+                documents.map((doc) => (
+                  <span
+                    key={doc.id}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-white/[0.03] text-white/50 border border-white/5 truncate max-w-[200px]"
+                  >
+                    {doc.name}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm transition">
+        <div className="flex items-center gap-3 ml-4">
+          <button className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm transition whitespace-nowrap">
             Export Chat
           </button>
-
-          <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-medium">
+          <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-medium flex-shrink-0">
             A
           </div>
         </div>

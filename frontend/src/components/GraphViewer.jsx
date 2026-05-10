@@ -1,42 +1,82 @@
 import { useState, useEffect } from "react";
 import { getDocumentGraph } from "../api/client";
-import { AlertCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, Loader2 } from "lucide-react";
 
-export default function GraphViewer({ documents = [] }) {
-  const [selectedDocId, setSelectedDocId] = useState(null);
+export default function GraphViewer({ documents = [], onNodeClick }) {
   const [graphData, setGraphData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [entities, setEntities] = useState([]);
 
-  useEffect(() => {
-    if (selectedDocId) {
-      fetchGraph(selectedDocId);
-    } else if (documents.length > 0) {
-      setSelectedDocId(documents[0].id);
-    }
-  }, [selectedDocId, documents]);
+  const readyDocs = documents.filter((d) => d.kg_ready && d.status === "ready");
+  const hasPendingDocs = documents.some((d) => !d.kg_ready || d.status !== "ready");
 
-  async function fetchGraph(docId) {
+  useEffect(() => {
+    fetchMergedGraph();
+  }, [documents]); // re-fetch if documents array changes (like adding a doc, or one becomes ready)
+
+  async function fetchMergedGraph() {
+    if (readyDocs.length === 0) {
+      setGraphData(null);
+      setEntities([]);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const graph = await getDocumentGraph(docId);
-      setGraphData(graph);
+      // Fetch graphs for all ready documents in parallel
+      const allGraphs = await Promise.all(
+        readyDocs.map((d) => getDocumentGraph(d.id).catch(() => null))
+      );
 
-      // Extract unique entities
+      const mergedNodes = new Map();
+      const mergedLinks = [];
+      const linkSet = new Set();
+
+      allGraphs.forEach((g) => {
+        if (!g) return;
+        if (g.nodes) {
+          g.nodes.forEach((n) => {
+            const id = n.id || n.label || n.name;
+            if (!mergedNodes.has(id)) {
+              mergedNodes.set(id, n);
+            }
+          });
+        }
+        if (g.links) {
+          g.links.forEach((l) => {
+            const source = typeof l.source === "object" ? l.source.id : l.source;
+            const target = typeof l.target === "object" ? l.target.id : l.target;
+            const rel = l.label || l.relation || "";
+            const key = `${source}-${target}-${rel}`;
+            if (!linkSet.has(key)) {
+              linkSet.add(key);
+              mergedLinks.push(l);
+            }
+          });
+        }
+      });
+
+      setGraphData({
+        nodes: Array.from(mergedNodes.values()),
+        links: mergedLinks,
+        type: "Merged Knowledge Graph",
+      });
+
+      // Extract unique entities for buttons
       const entitySet = new Set();
-      if (graph.nodes) {
-        graph.nodes.forEach((node) => {
-          if (node.label || node.name) {
-            entitySet.add(node.label || node.name);
-          }
-        });
-      }
-      setEntities(Array.from(entitySet).slice(0, 10)); // Top 10
+      mergedNodes.forEach((n) => {
+        if (n.label || n.name) {
+          entitySet.add(n.label || n.name);
+        }
+      });
+      setEntities(Array.from(entitySet).slice(0, 15)); // Top 15
+
     } catch (err) {
-      setError(err.message);
-      console.error("Failed to fetch graph:", err);
+      setError("Failed to merge workspace graphs.");
+      console.error("Failed to fetch merged graph:", err);
     } finally {
       setLoading(false);
     }
@@ -57,29 +97,27 @@ export default function GraphViewer({ documents = [] }) {
 
   return (
     <aside className="w-[360px] border-l border-white/10 bg-[#11111b] hidden xl:flex flex-col">
-      <div className="p-5 border-b border-white/10">
-        <h2 className="font-semibold mb-1">Knowledge Graph</h2>
-        <p className="text-sm text-white/40">
-          Relationships extracted from documents
-        </p>
-      </div>
-
-      {/* Document Selector */}
-      {documents.length > 1 && (
-        <div className="px-5 py-3 border-b border-white/10">
-          <select
-            value={selectedDocId || ""}
-            onChange={(e) => setSelectedDocId(parseInt(e.target.value))}
-            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50 transition"
-          >
-            {documents.map((doc) => (
-              <option key={doc.id} value={doc.id}>
-                {doc.name}
-              </option>
-            ))}
-          </select>
+      <div className="p-5 border-b border-white/10 flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold mb-1 flex items-center gap-2">
+            Knowledge Graph
+            {hasPendingDocs && (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-400" title="Processing new documents..." />
+            )}
+          </h2>
+          <p className="text-sm text-white/40">
+            Workspace entities & relationships
+          </p>
         </div>
-      )}
+        <button
+          onClick={fetchMergedGraph}
+          disabled={loading || readyDocs.length === 0}
+          className="p-2 hover:bg-white/10 rounded-lg transition disabled:opacity-50"
+          title="Refresh Graph"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+        </button>
+      </div>
 
       <div className="flex-1 p-5 overflow-y-auto space-y-5">
         {error && (
@@ -89,7 +127,18 @@ export default function GraphViewer({ documents = [] }) {
           </div>
         )}
 
-        {loading ? (
+        {/* If no docs are ready, but some are pending, show big spinner */}
+        {readyDocs.length === 0 && hasPendingDocs ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="animate-spin mb-4">
+              <div className="w-8 h-8 border-2 border-violet-600 border-t-transparent rounded-full" />
+            </div>
+            <p className="text-sm font-medium text-white/80">Processing Workspace...</p>
+            <p className="text-xs text-white/40 mt-2 max-w-[250px]">
+              Extracting knowledge graph entities and relationships. This may take a moment.
+            </p>
+          </div>
+        ) : loading && !graphData ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin">
               <div className="w-6 h-6 border-2 border-violet-600 border-t-transparent rounded-full" />
@@ -103,17 +152,20 @@ export default function GraphViewer({ documents = [] }) {
 
               {entities.length === 0 ? (
                 <p className="text-xs text-white/40">
-                  No entities extracted yet. The graph will update as you query documents.
+                  No entities extracted yet.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {entities.map((entity) => (
-                    <span
+                    <button
                       key={entity}
-                      className="text-xs px-3 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20"
+                      onClick={() => {
+                        if (onNodeClick) onNodeClick(entity);
+                      }}
+                      className="text-xs px-3 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/20 transition cursor-pointer"
                     >
                       {entity}
-                    </span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -126,10 +178,10 @@ export default function GraphViewer({ documents = [] }) {
               {graphData && graphData.nodes ? (
                 <div className="space-y-2 text-xs text-white/60">
                   <div>
-                    <span className="text-white/80">Nodes:</span> {graphData.nodes.length}
+                    <span className="text-white/80">Total Nodes:</span> {graphData.nodes.length}
                   </div>
                   <div>
-                    <span className="text-white/80">Relationships:</span>{" "}
+                    <span className="text-white/80">Total Relationships:</span>{" "}
                     {graphData.links ? graphData.links.length : 0}
                   </div>
 
@@ -155,8 +207,8 @@ export default function GraphViewer({ documents = [] }) {
             {/* Graph Stats */}
             {graphData && (
               <div className="bg-white/[0.04] border border-white/10 rounded-2xl p-5 text-xs text-white/60">
-                <p className="text-white/80 font-medium mb-2">Graph Type</p>
-                <p>{graphData.type || "Knowledge Graph"}</p>
+                <p className="text-white/80 font-medium mb-2">Workspace Graph</p>
+                <p>Merged from {readyDocs.length} document{readyDocs.length > 1 ? "s" : ""}</p>
               </div>
             )}
           </>

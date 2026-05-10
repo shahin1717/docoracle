@@ -4,7 +4,7 @@ from pydoc import doc
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, status, Form, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -40,8 +40,9 @@ class DocumentOut(BaseModel):
 # ── POST /documents/upload ────────────────────────────────────────────────────
 @router.post("/upload", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    file: UploadFile,
     background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session_id: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -83,6 +84,7 @@ async def upload_document(
         file_path = str(dest),
         file_size = len(content),
         status    = "pending",
+        session_id = session_id,
     )
     db.add(doc)
     db.commit()
@@ -98,15 +100,15 @@ async def upload_document(
 # ── GET /documents ────────────────────────────────────────────────────────────
 @router.get("", response_model=list[DocumentOut])
 def list_documents(
+    session_id: str | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    docs = (
-        db.query(Document)
-        .filter(Document.user_id == current_user.id)
-        .order_by(Document.created_at.desc())
-        .all()
-    )
+    query = db.query(Document).filter(Document.user_id == current_user.id)
+    if session_id:
+        query = query.filter(Document.session_id == session_id)
+    
+    docs = query.order_by(Document.created_at.desc()).all()
     return [DocumentOut.model_validate(d) for d in docs]
 
 

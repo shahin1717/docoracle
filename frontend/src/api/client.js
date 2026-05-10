@@ -67,8 +67,12 @@ export async function logoutUser() {
 }
 
 // ==================== DOCUMENTS ====================
-export async function getDocuments() {
-  const res = await fetch(`${API_URL}/documents`, {
+export async function getDocuments(sessionId = null) {
+  let url = `${API_URL}/documents`;
+  if (sessionId) {
+    url += `?session_id=${sessionId}`;
+  }
+  const res = await fetch(url, {
     method: "GET",
     headers: getHeaders(),
   });
@@ -80,9 +84,12 @@ export async function getDocuments() {
   return res.json(); // [ { id, name, pages, uploaded_at, ... } ]
 }
 
-export async function uploadDocument(file) {
+export async function uploadDocument(file, sessionId = null) {
   const formData = new FormData();
   formData.append("file", file);
+  if (sessionId) {
+    formData.append("session_id", sessionId);
+  }
 
   const token = localStorage.getItem("token");
   const headers = {};
@@ -138,11 +145,10 @@ export async function queryDocuments(query, docIds = null) {
 }
 
 // Stream helper for chat responses (Server-Sent Events)
-export async function streamQuery(query, docIds = null, sessionId = null, onChunk, onError) {
+export async function streamQuery(query, sessionId = null, onChunk, onError) {
   try {
     const payload = {
       query,
-      doc_ids: docIds,
       session_id: sessionId,
     };
 
@@ -210,6 +216,15 @@ export async function getChatSessions() {
     headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to fetch chat sessions");
+  return res.json();
+}
+
+export async function createChatSession() {
+  const res = await fetch(`${API_URL}/chat/sessions`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to create chat session");
   return res.json();
 }
 

@@ -13,15 +13,31 @@ export default function AppPage() {
   const [documents, setDocuments] = useState([]);
   const [sessionId, setSessionId] = useState(null);
   const [refreshChats, setRefreshChats] = useState(0);
+  const [pendingQuery, setPendingQuery] = useState(null);
 
-  // Fetch documents on mount
+  // Fetch documents when session changes
   useEffect(() => {
     loadDocuments();
-  }, []);
+  }, [sessionId]);
+
+  // Poll for document status if any are pending
+  useEffect(() => {
+    const hasPendingDocs = documents.some((d) => !d.kg_ready || d.status !== "ready");
+    if (hasPendingDocs && sessionId) {
+      const interval = setInterval(() => {
+        loadDocuments();
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [documents, sessionId]);
 
   async function loadDocuments() {
+    if (!sessionId) {
+      setDocuments([]);
+      return;
+    }
     try {
-      const docs = await getDocuments();
+      const docs = await getDocuments(sessionId);
       setDocuments(docs);
     } catch (err) {
       console.error("Failed to load documents:", err);
@@ -58,10 +74,15 @@ export default function AppPage() {
           setSessionId(id);
           setRefreshChats(prev => prev + 1);
         }}
+        pendingQuery={pendingQuery}
+        clearPendingQuery={() => setPendingQuery(null)}
       />
 
       {/* Right Panel - Knowledge Graph */}
-      <GraphViewer documents={documents} />
+      <GraphViewer 
+        documents={documents} 
+        onNodeClick={(entity) => setPendingQuery(`explain more '${entity}'`)}
+      />
 
       {/* Logout Button (floating) */}
       <button

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Integer, DateTime, ForeignKey, Boolean, Text
+    Column, String, Integer, DateTime, ForeignKey, Boolean, Text, JSON
 )
 from sqlalchemy.orm import relationship
 
@@ -47,6 +47,8 @@ class Document(Base):
     id           = Column(String, primary_key=True, default=_uuid)
     user_id      = Column(String, ForeignKey("users.id", ondelete="CASCADE"),
                           nullable=False, index=True)
+    session_id   = Column(String, ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+                          nullable=True, index=True)
 
     filename     = Column(String(255), nullable=False)
     file_type    = Column(String(16),  nullable=False)
@@ -65,6 +67,7 @@ class Document(Base):
                           onupdate=datetime.utcnow, nullable=False)
 
     owner = relationship("User", back_populates="documents")
+    session = relationship("ChatSession", back_populates="documents")
 
     def __repr__(self) -> str:
         return f"<Document id={self.id} filename={self.filename} status={self.status}>"
@@ -82,6 +85,7 @@ class ChatSession(Base):
 
     owner    = relationship("User", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="session", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<ChatSession id={self.id} title={self.title}>"

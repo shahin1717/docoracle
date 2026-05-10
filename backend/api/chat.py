@@ -21,7 +21,6 @@ log = logging.getLogger(__name__)
 # ── request schema ────────────────────────────────────────────────────────────
 class QueryRequest(BaseModel):
     query:   str
-    doc_ids: list[str]
     session_id: str | None = None
 
 
@@ -36,6 +35,19 @@ def get_sessions(
     ).order_by(ChatSession.updated_at.desc()).all()
     
     return [{"id": s.id, "title": s.title, "updated_at": s.updated_at} for s in sessions]
+
+
+# ── POST /chat/sessions ───────────────────────────────────────────────────────
+@router.post("/sessions")
+def create_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    new_session = ChatSession(user_id=current_user.id, title="New Chat")
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+    return {"id": new_session.id, "title": new_session.title}
 
 
 # ── GET /chat/sessions/{session_id} ───────────────────────────────────────────
@@ -112,27 +124,8 @@ async def chat_query(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Query cannot be empty.",
         )
-    if not body.doc_ids:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Select at least one document.",
-        )
 
-    # verify ownership + readiness
-    for doc_id in body.doc_ids:
-        doc = db.query(Document).filter(
-            Document.id == doc_id,
-            Document.user_id == current_user.id,
-        ).first()
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"Document {doc_id} not found.")
-        if doc.status != "ready":
-            raise HTTPException(
-                status_code=409,
-                detail=f"Document '{doc.filename}' is still being processed.",
-            )
-
-    # Handle chat session
+    # Handle chat session first
     session_id = body.session_id
     if not session_id:
         title = body.query[:50] + ("..." if len(body.query) > 50 else "")
@@ -149,7 +142,31 @@ async def chat_query(
         if not existing:
             raise HTTPException(status_code=404, detail="Chat session not found.")
         existing.updated_at = datetime.utcnow()
+        if existing.title == "New Chat":
+            existing.title = body.query[:50] + ("..." if len(body.query) > 50 else "")
         db.commit()
+
+    # Automatically fetch doc_ids for this session
+    session_docs = db.query(Document).filter(
+        Document.session_id == session_id,
+        Document.user_id == current_user.id
+    ).all()
+    
+    if not session_docs:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No documents uploaded to this chat session.",
+        )
+        
+    doc_ids = [d.id for d in session_docs]
+
+    # verify readiness
+    for doc in session_docs:
+        if doc.status != "ready":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Document '{doc.filename}' is still being processed.",
+            )
 
     # Save user query to DB
     user_msg = ChatMessage(session_id=session_id, role="user", content=body.query)
@@ -170,7 +187,7 @@ async def chat_query(
     model = current_user.preferred_model  # None → query_service falls back to settings
 
     return StreamingResponse(
-        _event_stream(body.query, body.doc_ids, current_user.id, model, session_id, chat_history),
+        _event_stream(body.query, doc_ids, current_user.id, model, session_id, chat_history),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

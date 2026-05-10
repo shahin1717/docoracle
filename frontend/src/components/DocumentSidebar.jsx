@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getDocuments, uploadDocument, deleteDocument, getChatSessions, deleteChatSession } from "../api/client";
-import { FileText, Trash2, Upload, MessageSquare, Plus } from "lucide-react";
+import { getDocuments, uploadDocument, deleteDocument, getChatSessions, deleteChatSession, createChatSession } from "../api/client";
+import { FileText, Trash2, Upload, MessageSquare, Plus, Loader2 } from "lucide-react";
 
 export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTrigger, documents = [], onDocumentsChange }) {
   const [sessions, setSessions] = useState([]);
@@ -42,7 +42,11 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
     setError(null);
 
     try {
-      await uploadDocument(file);
+      if (!sessionId) {
+        setError("Please create or select a chat first before uploading documents.");
+        return;
+      }
+      await uploadDocument(file, sessionId);
       if (onDocumentsChange) onDocumentsChange();
       
       // Reset file input
@@ -217,8 +221,11 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
                     <div className="flex items-start gap-3 flex-1">
                       <div className="mt-1">{getFileIcon(doc.name)}</div>
                       <div className="flex-1">
-                        <h3 className="font-medium text-sm mb-1 break-all line-clamp-2 group-hover:text-violet-300 transition">
-                          {doc.name}
+                        <h3 className="font-medium text-sm mb-1 break-all line-clamp-2 group-hover:text-violet-300 transition flex items-center gap-2">
+                          {doc.name || doc.filename}
+                          {(!doc.kg_ready || doc.status !== "ready") && (
+                            <Loader2 className="w-3 h-3 animate-spin text-violet-400" title="Processing document..." />
+                          )}
                         </h3>
                         <p className="text-xs text-white/40">{doc.pages || "?"} pages</p>
                       </div>
@@ -246,7 +253,15 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
         <>
           <div className="p-5 border-b border-white/10">
             <button
-              onClick={() => onSessionSelect(null)}
+              onClick={async () => {
+                try {
+                  const newSession = await createChatSession();
+                  onSessionSelect(newSession.id);
+                  fetchSessions();
+                } catch (err) {
+                  console.error(err);
+                }
+              }}
               className="w-full bg-white/5 hover:bg-white/10 border border-white/10 transition rounded-xl py-3 font-medium flex items-center justify-center gap-2 text-sm"
             >
               <Plus className="w-4 h-4" />
