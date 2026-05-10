@@ -14,6 +14,7 @@ export default function AppPage() {
   const [sessionId, setSessionId] = useState(null);
   const [refreshChats, setRefreshChats] = useState(0);
   const [pendingQuery, setPendingQuery] = useState(null);
+  const [showGraphModal, setShowGraphModal] = useState(false);
 
   // Fetch documents when session changes
   useEffect(() => {
@@ -76,13 +77,20 @@ export default function AppPage() {
         }}
         pendingQuery={pendingQuery}
         clearPendingQuery={() => setPendingQuery(null)}
+        onOpenGraph={() => setShowGraphModal(true)}
       />
 
-      {/* Right Panel - Knowledge Graph */}
-      <GraphViewer 
-        documents={documents} 
-        onNodeClick={(entity) => setPendingQuery(`explain more '${entity}'`)}
-      />
+      {/* Graph Modal */}
+      {showGraphModal && (
+        <GraphViewer 
+          documents={documents} 
+          onNodeClick={(entity) => {
+            setPendingQuery(`explain more '${entity}'`);
+            setShowGraphModal(false);
+          }}
+          onClose={() => setShowGraphModal(false)}
+        />
+      )}
 
       {/* Logout Button (floating) */}
       <button

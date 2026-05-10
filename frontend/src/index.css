@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* react-d3-tree custom styles */
+.rd3t-link {
+  stroke: #8b5cf6 !important; /* violet-500 */
+  stroke-width: 1.5px !important;
+  stroke-opacity: 0.6;
+}
