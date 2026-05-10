@@ -1,5 +1,6 @@
 # backend/api/documents.py
 import logging
+from pydoc import doc
 import shutil
 from pathlib import Path
 
@@ -88,9 +89,8 @@ async def upload_document(
     db.refresh(doc)
 
     # ── kick off background pipeline ──────────────────────────────────────────
-    background_tasks.add_task(run_ingestion, doc.id, db)
-    background_tasks.add_task(build_knowledge_graph, doc.id, db)
-
+    background_tasks.add_task(run_ingestion, doc.id)
+    background_tasks.add_task(build_knowledge_graph, doc.id)
     log.info("upload: document %s queued for ingestion", doc.id)
     return DocumentOut.model_validate(doc)
 

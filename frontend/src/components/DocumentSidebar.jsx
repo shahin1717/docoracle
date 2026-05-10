@@ -66,24 +66,28 @@ export default function DocumentSidebar() {
   }
 
   const getFileIcon = (filename) => {
-    const ext = filename.split(".").pop().toLowerCase();
-    const iconClass = "w-6 h-6";
+  if (!filename) return <FileText className="w-6 h-6 text-gray-400" />;
 
-    switch (ext) {
-      case "pdf":
-        return <span className={`${iconClass} text-red-400`}>📄</span>;
-      case "docx":
-      case "doc":
-        return <span className={`${iconClass} text-blue-400`}>📘</span>;
-      case "pptx":
-      case "ppt":
-        return <span className={`${iconClass} text-orange-400`}>📊</span>;
-      case "md":
-        return <span className={`${iconClass} text-gray-400`}>#</span>;
-      default:
-        return <FileText className={`${iconClass} text-gray-400`} />;
-    }
-  };
+  const ext = filename.split(".").pop()?.toLowerCase() || "";
+
+  const iconClass = "w-6 h-6";
+
+  switch (ext) {
+    case "pdf":
+      return <span className={`${iconClass} text-red-400`}>📄</span>;
+    case "docx":
+    case "doc":
+      return <span className={`${iconClass} text-blue-400`}>📘</span>;
+    case "pptx":
+    case "ppt":
+      return <span className={`${iconClass} text-orange-400`}>📊</span>;
+    case "md":
+    case "markdown":
+      return <span className={`${iconClass} text-gray-400`}>#</span>;
+    default:
+      return <FileText className={`${iconClass} text-gray-400`} />;
+  }
+};
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

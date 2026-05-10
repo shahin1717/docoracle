@@ -24,70 +24,62 @@ def build_knowledge_graph(document_id: str, db: Session) -> None:
         5. Save graph JSON to data/graphs/<doc_id>.json
         6. Mark document.kg_ready = True
     """
-    doc = db.query(Document).filter(Document.id == document_id).first()
-    if not doc:
-        log.error("kg: document %s not found", document_id)
-        return
-
-    if doc.status != "ready":
-        log.warning("kg: document %s not ready yet — skipping KG build", document_id)
-        return
-
-    log.info("kg: starting graph build for %s", doc.filename)
-
+    db = None
     try:
-        # ── 1. load chunk texts ───────────────────────────────────────────────
+        from backend.db.database import SessionLocal
+        db = SessionLocal()
+
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            log.error(f"Document {document_id} not found for KG build")
+            return
+
+        if doc.status != "ready":
+            log.warning(f"Document {document_id} not ready yet — skipping KG")
+            return
+
+        log.info(f"Starting KG build for {doc.filename}")
+
         from ai.vectorstore.metadata_store import MetadataStore
         meta_store = MetadataStore(db_path=settings.docs_db_path)
         chunks = meta_store.get_chunks_for_doc(doc.file_path)
 
         if not chunks:
-            log.warning("kg: no chunks found for doc %s", document_id)
+            log.warning(f"No chunks found for doc {document_id}")
             return
 
         full_text = "\n".join(c["text"] for c in chunks)
-        log.info("kg: loaded %d chunks, %d chars", len(chunks), len(full_text))
 
-        # ── 2. extract entities ───────────────────────────────────────────────
         from knowledge_graph.entity_extractor import EntityExtractor
         entity_extractor = EntityExtractor()
         entities = entity_extractor.extract(full_text)
-        log.info("kg: %d entities extracted", len(entities))
 
-        # ── 3. extract relations ──────────────────────────────────────────────
         from knowledge_graph.relation_extractor import RelationExtractor
         relation_extractor = RelationExtractor()
         triples = relation_extractor.extract(full_text, entities)
-        log.info("kg: %d triples extracted", len(triples))
 
-        # ── 4. build graph ────────────────────────────────────────────────────
         from knowledge_graph.graph_builder import GraphBuilder
         builder = GraphBuilder()
         graph = builder.build(entities=entities, triples=triples)
-        log.info(
-            "kg: graph built — %d nodes, %d edges",
-            graph.number_of_nodes(),
-            graph.number_of_edges(),
-        )
 
-        # ── 5. save graph ─────────────────────────────────────────────────────
         from knowledge_graph.graph_store import GraphStore
-        graphs_dir = str(settings.graphs_dir)
-        g_store = GraphStore(graphs_dir)
+        g_store = GraphStore(str(settings.graphs_dir))
         g_store.save(graph, document_id)
-        log.info("kg: graph saved → %s/%s.json", graphs_dir, document_id)
 
-        # ── 6. mark kg_ready ──────────────────────────────────────────────────
         doc.kg_ready = True
         db.add(doc)
         db.commit()
-        log.info("kg: document %s kg_ready = True", document_id)
+
+        log.info(f"✅ Knowledge Graph built successfully for {document_id}")
 
     except Exception as exc:
-        log.exception("kg: build failed for document %s", document_id)
-        # KG failure is non-fatal — document stays usable for RAG
-
-
+        log.exception(f"KG build failed for document {document_id}")
+        # KG failure is non-fatal
+    finally:
+        if db:
+            db.close()
+            
+            
 # ── serve ─────────────────────────────────────────────────────────────────────
 def get_graph_data(document_id: str) -> dict:
     """

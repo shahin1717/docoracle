@@ -20,6 +20,7 @@ from backend.api.users import router as users_router
 async def lifespan(app: FastAPI):
     setup_logging(debug=settings.debug)
     init_db()
+    print("✅ CORS Origins:", settings.allowed_origins)   
     yield
 
 
@@ -33,7 +34,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
