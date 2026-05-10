@@ -36,6 +36,7 @@ data/graphs/
 data/uploads/
 data/faiss_index/
 data/*.db
+/data/docs.db
 *.db
 app.db
 docs.db
