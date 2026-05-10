@@ -5,11 +5,17 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+import json
+from typing import Generator
+
 from backend.auth.middleware import get_current_user
 from backend.auth.models import UserOut, UserUpdateRequest
 from backend.config import settings
 from backend.db.database import get_db
 from backend.db.models import User
+from ai.model_manager import LLM_MODELS
 
 router = APIRouter(prefix="/users", tags=["users"])
 log = logging.getLogger(__name__)
@@ -45,12 +51,42 @@ def list_available_models(
         )
 
     active = current_user.preferred_model or settings.llm_model
+    catalog = [{"id": m[0], "vram": m[1], "ram": m[2], "desc": m[3]} for m in LLM_MODELS]
 
     return {
         "models":  all_models,
         "current": active,
         "default": settings.llm_model,
+        "catalog": catalog,
     }
+
+
+class PullModelRequest(BaseModel):
+    model: str
+
+
+@router.post("/models/pull")
+def pull_model_endpoint(
+    body: PullModelRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Proxy Ollama's /api/pull to stream progress."""
+    def _stream() -> Generator[str, None, None]:
+        try:
+            with requests.post(
+                f"{settings.ollama_base_url}/api/pull",
+                json={"name": body.model, "stream": True},
+                stream=True,
+                timeout=600,
+            ) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if line:
+                        yield f"data: {line.decode('utf-8')}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 # ── PATCH /users/me ───────────────────────────────────────────────────────────

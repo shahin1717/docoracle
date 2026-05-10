@@ -265,3 +265,72 @@ export async function checkHealth() {
   const res = await fetch(`${API_URL}/health`);
   return res.ok;
 }
+
+// ==================== MODELS ====================
+export async function getModels() {
+  const res = await fetch(`${API_URL}/users/models`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch models");
+  return res.json();
+}
+
+export async function setPreferredModel(modelName) {
+  const res = await fetch(`${API_URL}/users/me`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify({ preferred_model: modelName }),
+  });
+  if (!res.ok) throw new Error("Failed to set model");
+  return res.json();
+}
+
+export async function pullModelStream(modelName, onChunk, onError) {
+  try {
+    const res = await fetch(`${API_URL}/users/models/pull`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ model: modelName }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Pull request failed");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i];
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            onChunk(data);
+          } catch (e) {
+            console.error("Parse error:", e);
+          }
+        }
+      }
+      buffer = lines[lines.length - 1];
+    }
+    
+    if (buffer.startsWith("data: ")) {
+      try {
+        const data = JSON.parse(buffer.slice(6));
+        onChunk(data);
+      } catch (e) {
+        console.error("Parse error:", e);
+      }
+    }
+  } catch (error) {
+    onError?.(error);
+  }
+}

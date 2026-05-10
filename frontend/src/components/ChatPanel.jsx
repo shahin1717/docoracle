@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { streamQuery, getChatSession } from "../api/client";
-import { Send, AlertCircle, Loader2, Network } from "lucide-react";
+import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check } from "lucide-react";
+import { getModels, setPreferredModel, pullModelStream } from "../api/client";
 
 export default function ChatPanel({ documents = [], sessionId, onSessionChange, pendingQuery, clearPendingQuery, onOpenGraph }) {
   const [messages, setMessages] = useState([
@@ -16,6 +17,58 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const [modelData, setModelData] = useState({ models: [], current: "", catalog: [] });
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const [pullProgress, setPullProgress] = useState(null);
+
+  useEffect(() => {
+    loadModels();
+  }, []);
+
+  async function loadModels() {
+    try {
+      const data = await getModels();
+      setModelData(data);
+    } catch (err) {
+      console.error("Failed to load models:", err);
+    }
+  }
+
+  async function handleModelSelect(modelId) {
+    setIsModelDropdownOpen(false);
+    
+    if (modelData.models.includes(modelId)) {
+      try {
+        await setPreferredModel(modelId);
+        setModelData(prev => ({ ...prev, current: modelId }));
+      } catch (err) {
+        setError("Failed to set model.");
+      }
+    } else {
+      setPullProgress({ model: modelId, percent: 0 });
+      try {
+        await pullModelStream(modelId, (chunk) => {
+          if (chunk.total && chunk.completed) {
+            const p = Math.round((chunk.completed / chunk.total) * 100);
+            setPullProgress({ model: modelId, percent: p });
+          } else if (chunk.status === "success") {
+            setPullProgress({ model: modelId, percent: 100 });
+          }
+        }, (err) => {
+          setError("Failed to pull model: " + err.message);
+          setPullProgress(null);
+        });
+        
+        await setPreferredModel(modelId);
+        await loadModels();
+      } catch (err) {
+        setError("Failed to pull model.");
+      } finally {
+        setPullProgress(null);
+      }
+    }
+  }
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -311,23 +364,71 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
               <span>RAG + Knowledge Graph</span>
             </div>
 
-            <button
-              onClick={handleSendMessage}
-              disabled={loading || !input.trim() || documents.length === 0}
-              className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Thinking...
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Send
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <button
+                  onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-sm transition flex items-center gap-2"
+                >
+                  <span className="text-white/80 max-w-[150px] truncate">
+                    {pullProgress ? `Downloading... ${pullProgress.percent}%` : (modelData.current || "Loading...")}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-white/50" />
+                </button>
+
+                {isModelDropdownOpen && (
+                  <div className="absolute bottom-full mb-2 right-0 w-80 bg-[#1a1a24] border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
+                    <div className="max-h-80 overflow-y-auto p-2">
+                      <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-2 px-2 pt-1">Available Models</div>
+                      {modelData.catalog.map((m) => {
+                        const isDownloaded = modelData.models.includes(m.id);
+                        const isCurrent = modelData.current === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => handleModelSelect(m.id)}
+                            disabled={pullProgress !== null}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition ${isCurrent ? "bg-violet-600/20 text-violet-300" : "hover:bg-white/5 text-white/80"}`}
+                          >
+                            <div className="flex flex-col overflow-hidden mr-3">
+                              <span className="text-sm font-medium truncate">{m.id}</span>
+                              <span className="text-xs text-white/40 truncate mt-0.5">{m.desc}</span>
+                            </div>
+                            <div className="flex-shrink-0 flex items-center">
+                              {isCurrent ? (
+                                <Check className="w-4 h-4 text-violet-400" />
+                              ) : isDownloaded ? (
+                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/50 font-medium">Ready</span>
+                              ) : (
+                                <Download className="w-4 h-4 text-white/30 group-hover:text-white/70 transition" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={handleSendMessage}
+                disabled={loading || !input.trim() || documents.length === 0 || pullProgress !== null}
+                className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition px-5 py-2.5 rounded-xl text-sm font-medium flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Thinking...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Send
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
