@@ -47,7 +47,6 @@ All processing is performed locally. The platform requires no external API keys,
 ## Installation and Setup
 
 ### 1. Prerequisites
-- Ollama: Ensure Ollama is installed and the service is running.
 - Node.js: Required for frontend execution.
 - Python Environment: Python 3.11+ (Miniconda or Anaconda recommended).
 
@@ -57,7 +56,7 @@ Execute the universal setup script to install system dependencies, configure the
 ```bash
 bash setup_all.sh
 ```
-The script will prompt for a Conda environment name (defaults to `docoracle`).
+The script will prompt for a Conda environment name (defaults to `docoracle`) and install Ollama.
 
 ### 3. Execution
 Launch the backend and frontend services simultaneously using the provided startup script:
@@ -88,8 +87,7 @@ Once initialized, the services will be available at:
 ├── backend/           # FastAPI application & API routes
 ├── frontend/          # React + Vite frontend
 ├── knowledge_graph/   # Entity/Relation extraction & Graph building
-├── data/              # Local storage (Databases, Index, Uploads)
-└── tests/             # Comprehensive test suite
+└── data/              # Local storage (Databases, Index, Uploads)
 ```
 
 ---
