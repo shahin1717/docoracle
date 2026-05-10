@@ -1,102 +1,98 @@
-docoracle/  
-├── ai/  
-│   ├── __init__.py  
-│   ├── ingestion/  
-│   │   ├── __init__.py  
-│   │   ├── base_parser.py       # ParsedDocument dataclass + BaseParser ABC  
-│   │   ├── pdf_parser.py        # PyMuPDF, page-by-page extraction  
-│   │   ├── docx_parser.py       # python-docx, heading sections + tables  
-│   │   ├── pptx_parser.py       # python-pptx, slides + speaker notes  
-│   │   ├── md_parser.py         # pure Python, strips markdown syntax  
-│   │   └── router.py            # parse_document(path) — auto-detects type  
-│   ├── chunker/  
-│   │   ├── __init__.py  
-│   │   └── chunker.py           # Chunker(chunk_size=512, overlap=64), Chunk dataclass  
-│   ├── embedding/  
-│   │   ├── __init__.py  
-│   │   └── embedder.py          # Embedder — calls Ollama /api/embeddings, returns EmbeddedChunk  
-│   ├── vectorstore/  
-│   │   ├── __init__.py  
-│   │   ├── faiss_store.py       # FAISSStore — IndexFlatIP, cosine similarity  
-│   │   └── metadata_store.py    # MetadataStore — SQLite, chunk text + metadata  
-│   ├── retrieval/  
-│   │   ├── __init__.py  
-│   │   ├── dense_retriever.py   # DenseRetriever — FAISS cosine search  
-│   │   ├── bm25_retriever.py    # BM25Retriever — pure Python keyword search  
-│   │   ├── hybrid_retriever.py  # HybridRetriever — RRF score fusion  
-│   │   └── reranker.py          # Reranker — embedding cosine reranking  
-│   └── generation/  
-│       ├── __init__.py  
-│       ├── llm_client.py        # LLMClient — Ollama /api/chat, blocking + streaming  
-│       └── prompt_builder.py    # build_prompt(query, chunk_ids, store) → messages list  
-│  
-├── knowledge_graph/  
-│   ├── __init__.py  
-│   ├── entity_extractor.py      # EntityExtractor — capitalized phrases, technical terms, quoted terms  
-│   ├── relation_extractor.py    # RelationExtractor — rule-based (subject, relation, object) triples  
-│   ├── graph_builder.py         # GraphBuilder — NetworkX DiGraph from entities + triples  
-│   ├── graph_store.py           # GraphStore — save/load graph JSON per doc  
-│   ├── graph_retriever.py       # GraphRetriever — context for query, subgraph, path finding  
-│   ├── graph_exporter.py        # GraphExporter — frontend JSON, GEXF, CSV  
-│   └── tests/  
-│       └── test_knowledge_graph.py  
-│  
-├── backend/  
-│   ├── main.py                  # FastAPI app, router registration  
-│   ├── config.py                # env vars, settings (pydantic BaseSettings)  
-│   ├── logging.py               # structured logging setup  
-│   ├── auth/  
-│   │   ├── router.py            # POST /auth/register, /auth/login, /auth/logout  
-│   │   ├── jwt_handler.py       # create/verify JWT tokens (python-jose)  
-│   │   ├── middleware.py        # protect routes, extract current user  
-│   │   └── models.py            # User pydantic request/response models  
-│   ├── api/  
-│   │   ├── documents.py         # POST /documents/upload, GET /documents, DELETE /documents/{id}  
-│   │   ├── chat.py              # POST /chat/query — SSE streaming response  
-│   │   ├── graph.py             # GET /graph/{doc_id} — returns KG JSON for frontend  
-│   │   └── health.py            # GET /health — model status check  
-│   ├── services/  
-│   │   ├── ingest_service.py    # orchestrates ai/ pipeline on upload  
-│   │   ├── query_service.py     # orchestrates retrieval + generation  
-│   │   └── kg_service.py        # triggers KG build, serves graph data  
-│   └── db/  
-│       ├── database.py          # SQLAlchemy engine, session, Base  
-│       └── models.py            # User, Document DB table models  
-│  
-├── frontend/  
-│   ├── src/  
-│   │   ├── pages/  
-│   │   │   ├── Landing.jsx      # home / marketing page  
-│   │   │   ├── Login.jsx        # login form  
-│   │   │   ├── Register.jsx     # register form  
-│   │   │   └── App.jsx          # main app layout (protected route)  
-│   │   ├── components/  
-│   │   │   ├── DocumentSidebar.jsx   # upload + list documents  
-│   │   │   ├── ChatPanel.jsx         # chat input + streaming message history  
-│   │   │   ├── CitationCard.jsx      # source highlight on answer  
-│   │   │   └── GraphViewer.jsx       # react-force-graph knowledge graph viz  
-│   │   ├── api/  
-│   │   │   └── client.js        # all fetch/axios calls in one place  
-│   │   ├── context/  
-│   │   │   └── AuthContext.jsx  # global auth state (token, user)  
-│   │   └── main.jsx  
-│   ├── package.json  
-│   └── vite.config.js  
-│  
-├── data/  
-│   ├── app.db                   # SQLite — users, documents (SQLAlchemy)  
-│   ├── docs.db                  # SQLite — chunks + metadata (MetadataStore)  
-│   ├── faiss_index/             # FAISS vector index files  
-│   ├── graphs/                  # per-doc knowledge graph JSON  
-│   └── uploads/                 # raw uploaded files  
-│  
-├── tests/  
-│   ├── test_ingestion.py        # 21 tests ✅  
-│   ├── test_chunker.py          # 8 tests ✅  
-│   ├── test_embedding.py        # 7 tests ✅  
-│   └── test_ai_full.py          # 22 tests ✅  
-│  
-├── paper.pdf  
-├── run.py  
-├── requirements.txt  
-└── README.md  
+# DocOracle: Local Intelligence Workspace
+
+DocOracle is a privacy-focused artificial intelligence platform designed to transform local document repositories into interactive knowledge bases. Utilizing local Large Language Models (LLMs) via Ollama, the platform integrates high-performance Hybrid Search (RAG) with dynamic Knowledge Graph visualization to provide deep analytical insights while ensuring data remains entirely on the user's local infrastructure.
+
+---
+
+## Core Features
+
+### Multi-modal Document Ingestion
+Native support for PDF, DOCX, PPTX, and Markdown formats. The system automatically processes document layouts, tables, and speaker notes to ensure high-fidelity data extraction.
+
+### Hybrid RAG Engine
+Advanced retrieval system combining Semantic Vector Search (FAISS) and Keyword Search (BM25). The platform utilizes Reciprocal Rank Fusion (RRF) and re-ranking algorithms to deliver high-precision context for LLM generation.
+
+### Dynamic Knowledge Graph
+Automated extraction of entities and relationships from processed documents. The system constructs a visual Knowledge Map, enabling users to explore semantic connections and discover non-obvious insights within their data.
+
+### Real-time Workspace
+Professional chat interface featuring Server-Sent Events (SSE) for streaming responses, interactive source citations, and automated chat session management.
+
+### Model Management Console
+Integrated interface to pull, delete, and monitor Ollama models. Supports a wide range of Large Language Models and Embedding models.
+
+### Privacy and Security
+All processing is performed locally. The platform requires no external API keys, data sharing, or telemetry, ensuring complete data sovereignty.
+
+---
+
+## Technical Stack
+
+### Backend and AI Core
+- Framework: FastAPI (Python 3.11+)
+- Database: SQLAlchemy with SQLite
+- Vector Engine: FAISS (Meta AI)
+- Graph Library: NetworkX
+- Local Inference: Ollama
+- Document Parsing: PyMuPDF, python-docx, python-pptx
+
+### Frontend Architecture
+- Framework: React 19 with Vite
+- Styling: Tailwind CSS
+- Visualization: Lucide React, react-force-graph
+- Communication: SSE (Server-Sent Events)
+
+---
+
+## Installation and Setup
+
+### 1. Prerequisites
+- Ollama: Ensure Ollama is installed and the service is running.
+- Node.js: Required for frontend execution.
+- Python Environment: Python 3.11+ (Miniconda or Anaconda recommended).
+
+### 2. Initial Configuration
+Execute the universal setup script to install system dependencies, configure the Python environment, and initialize Ollama:
+
+```bash
+bash setup_all.sh
+```
+The script will prompt for a Conda environment name (defaults to `docoracle`).
+
+### 3. Execution
+Launch the backend and frontend services simultaneously using the provided startup script:
+
+```bash
+bash run.sh
+```
+Once initialized, the services will be available at:
+- Frontend Interface: http://localhost:5173
+- Backend API: http://localhost:8000
+
+---
+
+## Usage Instructions
+
+1. Account Creation: Register a local account to manage private chat sessions and document sets.
+2. Data Upload: Utilize the sidebar to upload documents into the workspace.
+3. Model Selection: Choose the desired LLM from the available models in the dropdown menu.
+4. Interaction: Submit queries to the AI. Reference citations are provided to verify the source material used for each response.
+5. Visualization: Access the Knowledge Map to view a graphical representation of entities and relations extracted from your documents.
+
+---
+
+## Project Structure
+
+```text
+├── ai/                # Core AI logic (Retrieval, Embedding, Chunker)
+├── backend/           # FastAPI application & API routes
+├── frontend/          # React + Vite frontend
+├── knowledge_graph/   # Entity/Relation extraction & Graph building
+├── data/              # Local storage (Databases, Index, Uploads)
+└── tests/             # Comprehensive test suite
+```
+
+---
+
+## License
+This project is licensed under the MIT License.
