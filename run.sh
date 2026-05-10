@@ -7,59 +7,34 @@ echo "      DocOracle Full Startup"
 echo "======================================"
 
 # -------------------------------
-# 1. Conda setup
+# 1. Start application
+# -------------------------------
+echo "Ensuring Conda environment is active..."
+
+# Try to find conda and activate docoracle
+if command -v conda &> /dev/null; then
+    eval "$(conda shell.bash hook)"
+    conda activate docoracle || echo "Warning: docoracle env not found"
+else
+    echo "Warning: conda not found in PATH"
+fi
+
+# -------------------------------
+# 2. Start backend
 # -------------------------------
 echo ""
-echo "🧱 Step 1: Conda setup"
+echo "🚀 Starting backend"
 echo "--------------------------------------"
 
-bash ./conda.sh
-
-# reload conda into current shell
-source "$HOME/miniconda3/etc/profile.d/conda.sh"
-
-ENV_NAME="docoracle"
-
-conda activate "$ENV_NAME"
-
-echo "✅ Conda environment activated"
-
-# -------------------------------
-# 2. Python environment setup
-# -------------------------------
-echo ""
-echo "📦 Step 2: Python project setup"
-echo "--------------------------------------"
-
-bash ./setup_env.sh
-
-# -------------------------------
-# 3. Ollama setup
-# -------------------------------
-echo ""
-echo "🧠 Step 3: Ollama setup"
-echo "--------------------------------------"
-
-bash ./ollama.sh
-
-# -------------------------------
-# 4. Start backend
-# -------------------------------
-echo ""
-echo "🚀 Step 4: Starting backend"
-echo "--------------------------------------"
-
-cd backend
- uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
-cd ..
 
 # -------------------------------
-# 5. Start frontend (if exists)
+# 3. Start frontend (if exists)
 # -------------------------------
 if [ -d "frontend" ]; then
     echo ""
-    echo "🌐 Step 5: Starting frontend"
+    echo "🌐 Starting frontend"
     echo "--------------------------------------"
 
     cd frontend
