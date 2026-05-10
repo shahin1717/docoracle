@@ -383,6 +383,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                       {modelData.catalog.map((m) => {
                         const isDownloaded = modelData.models.includes(m.id);
                         const isCurrent = modelData.current === m.id;
+                        const isRecommended = modelData.recommended === m.id;
                         return (
                           <button
                             key={m.id}
@@ -391,7 +392,12 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                             className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between group transition ${isCurrent ? "bg-violet-600/20 text-violet-300" : "hover:bg-white/5 text-white/80"}`}
                           >
                             <div className="flex flex-col overflow-hidden mr-3">
-                              <span className="text-sm font-medium truncate">{m.id}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium truncate">{m.id}</span>
+                                {isRecommended && (
+                                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">⭐ Recommended</span>
+                                )}
+                              </div>
                               <span className="text-xs text-white/40 truncate mt-0.5">{m.desc}</span>
                             </div>
                             <div className="flex-shrink-0 flex items-center">

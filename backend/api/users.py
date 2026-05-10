@@ -15,7 +15,7 @@ from backend.auth.models import UserOut, UserUpdateRequest
 from backend.config import settings
 from backend.db.database import get_db
 from backend.db.models import User
-from ai.model_manager import LLM_MODELS
+from ai.model_manager import LLM_MODELS, get_hardware_info, recommend_models
 
 router = APIRouter(prefix="/users", tags=["users"])
 log = logging.getLogger(__name__)
@@ -53,11 +53,15 @@ def list_available_models(
     active = current_user.preferred_model or settings.llm_model
     catalog = [{"id": m[0], "vram": m[1], "ram": m[2], "desc": m[3]} for m in LLM_MODELS]
 
+    hw = get_hardware_info()
+    rec = recommend_models(hw)
+
     return {
         "models":  all_models,
         "current": active,
         "default": settings.llm_model,
         "catalog": catalog,
+        "recommended": rec.llm_model,
     }
 
 
