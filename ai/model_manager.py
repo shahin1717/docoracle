@@ -13,6 +13,7 @@ LLM_MODELS = [
     ("mistral:7b-instruct-q4_0",    4.5, 8,  "Good quality — needs 4.5GB VRAM"),
     ("llama3.2:3b-instruct-q8_0",   3.5, 6,  "Fast + good — needs 3.5GB VRAM"),
     ("llama3.2:3b",                 2.5, 4,  "Fast — needs 2.5GB VRAM"),
+    ("llama3.2:1b",                 1.5, 3,  "CPU/iGPU friendly — needs 1.5GB VRAM"),
     ("phi3:mini",                   2.0, 4,  "Light — needs 2GB VRAM"),
     ("tinyllama:1.1b",              1.0, 2,  "Minimal — needs 1GB VRAM"),
 ]
@@ -165,6 +166,41 @@ def pull_model(model_name: str) -> bool:
         return False
 
 
+def save_to_env(llm_model: str, embed_model: str):
+    """Save the selected models to the .env file in the project root."""
+    import os
+    env_path = ".env"
+    lines = []
+    
+    if os.path.exists(env_path):
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+
+    new_lines = []
+    llm_updated = False
+    embed_updated = False
+
+    for line in lines:
+        if line.startswith("LLM_MODEL="):
+            new_lines.append(f"LLM_MODEL={llm_model}\n")
+            llm_updated = True
+        elif line.startswith("EMBED_MODEL="):
+            new_lines.append(f"EMBED_MODEL={embed_model}\n")
+            embed_updated = True
+        else:
+            new_lines.append(line)
+
+    if not llm_updated:
+        new_lines.append(f"LLM_MODEL={llm_model}\n")
+    if not embed_updated:
+        new_lines.append(f"EMBED_MODEL={embed_model}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(new_lines)
+        
+    print(f"\n✅ Saved configuration to {env_path}")
+
+
 def select_model_interactive() -> ModelRecommendation:
     """
     Full interactive model selection:
@@ -239,4 +275,12 @@ def select_model_interactive() -> ModelRecommendation:
             pull_model(rec.embed_model)
 
     print(f"\n🚀 Using: {rec.llm_model} + {rec.embed_model}\n")
+    save_to_env(rec.llm_model, rec.embed_model)
     return rec
+
+
+if __name__ == "__main__":
+    try:
+        select_model_interactive()
+    except KeyboardInterrupt:
+        print("\nExiting model manager...")
