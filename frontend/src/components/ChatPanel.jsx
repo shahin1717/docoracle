@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { streamQuery, getChatSession } from "../api/client";
-import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check } from "lucide-react";
-import { getModels, setPreferredModel, pullModelStream } from "../api/client";
+import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2 } from "lucide-react";
+import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession } from "../api/client";
 
 export default function ChatPanel({ documents = [], sessionId, onSessionChange, pendingQuery, clearPendingQuery, onOpenGraph }) {
   const [messages, setMessages] = useState([
@@ -67,6 +66,16 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
       } finally {
         setPullProgress(null);
       }
+    }
+  }
+
+  async function handleDeleteModel(modelId, e) {
+    e.stopPropagation();
+    try {
+      await deleteModel(modelId);
+      await loadModels();
+    } catch (err) {
+      setError("Failed to delete model: " + err.message);
     }
   }
 
@@ -404,7 +413,16 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                               {isCurrent ? (
                                 <Check className="w-4 h-4 text-violet-400" />
                               ) : isDownloaded ? (
-                                <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/50 font-medium">Ready</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/50 font-medium">Ready</span>
+                                  <button 
+                                    onClick={(e) => handleDeleteModel(m.id, e)}
+                                    className="p-1 hover:bg-red-500/20 text-white/20 hover:text-red-400 rounded-md transition opacity-0 group-hover:opacity-100"
+                                    title="Delete Model"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               ) : (
                                 <Download className="w-4 h-4 text-white/30 group-hover:text-white/70 transition" />
                               )}

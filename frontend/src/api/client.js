@@ -285,6 +285,15 @@ export async function setPreferredModel(modelName) {
   return res.json();
 }
 
+export async function deleteModel(modelName) {
+  const res = await fetch(`${API_URL}/users/models/${encodeURIComponent(modelName)}`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to delete model");
+  return res.json();
+}
+
 export async function pullModelStream(modelName, onChunk, onError) {
   try {
     const res = await fetch(`${API_URL}/users/models/pull`, {

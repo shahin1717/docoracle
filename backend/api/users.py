@@ -93,6 +93,27 @@ def pull_model_endpoint(
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
+@router.delete("/models/{model_name:path}")
+def delete_model_endpoint(
+    model_name: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a model from Ollama."""
+    try:
+        resp = requests.delete(
+            f"{settings.ollama_base_url}/api/delete",
+            json={"name": model_name},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return {"status": "ok", "deleted": model_name}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete model: {str(e)}",
+        )
+
+
 # ── PATCH /users/me ───────────────────────────────────────────────────────────
 @router.patch("/me", response_model=UserOut)
 def update_preferences(
