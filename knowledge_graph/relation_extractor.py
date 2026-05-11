@@ -66,7 +66,8 @@ class RelationExtractor:
         MAIN_TOPIC → CONTAINS → SUBTOPIC
         """
         triples = []
-        entity_map = {e["text"]: e for e in entities}
+        # Ensure text is string (prevents 'unhashable type: dict' if LLM returns objects)
+        entity_map = {str(e["text"]): e for e in entities}
 
         for entity in entities:
             parent_name = entity.get("parent")

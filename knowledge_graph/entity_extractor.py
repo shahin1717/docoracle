@@ -71,85 +71,83 @@ class EntityExtractor:
                 
         parts = []
         for i in sorted(list(set(indices))):
-            # Clean each chunk — keep lines > 5 chars for presentations/bullets
             text = chunks[i]["text"]
             lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 5]
-            if not lines:
-                lines = [text[:300]] # Fallback to raw if filter was too aggressive
+            
+            # STRIP HEADERS/FOOTERS: Often contain university names or page numbers
+            if len(lines) > 8:
+                lines = lines[2:-2] # Skip top 2 and bottom 2 lines
+                
             parts.append("\n".join(lines))
             
         return "\n\n".join(parts)[:max_chars]
 
     def extract_hierarchy(self, text: str, title_hint: str = "", toc: list[list] = None) -> dict:
         """
-        Ask LLM to extract a thematic topic map.
+        Ask LLM to extract a thematic topic map with a retry mechanism.
         """
+        if not text or len(text.strip()) < 50:
+            return self._fallback_extract(text, "Document (No text found)")
+
         toc_hint = ""
         if toc:
             toc_lines = [f"- {t}" for l, t, p in toc[:20] if l == 1]
             toc_hint = "\n\nDOCUMENT CHAPTERS:\n" + "\n".join(toc_lines)
 
-        prompt = f"""You are a Knowledge Graph specialist. Analyze the document segments and build a 1-to-1 THEMATIC TREE of the actual content.
+        prompt = f"""You are a Knowledge Graph specialist. Analyze the document segments and build a THEMATIC TREE of the content.
 
-GOAL: Map out the technical knowledge hierarchy.
-(Example: For "Linear Algebra", nodes should be "Matrices", "Vector Spaces", etc.)
-
-STRICT RULES:
-1. NO METADATA: Do not extract authors, university names, or dates.
-2. NO STRUCTURE: Do not extract "Introduction", "Summary", "Table of Contents", or "Slide X".
-3. BRANCHING: 
-   - "title" = Main Subject (e.g. "Linear Algebra")
-   - "topics" = Major areas (e.g. "Matrices", "Linear Independence")
-   - "subtopics" = Core details (e.g. "Determinant", "Inverse")
+STRICT FILTERING RULES:
+1. NO METADATA: NEVER extract university names, professor names, or dates.
+2. NO STRUCTURE: Ignore "Introduction", "Summary", or generic words like "Definition" or "Conclusion".
+3. TECHNICAL FOCUS: Extract only the core technical subjects (e.g., "Vector Space Properties", "Rank-Nullity Theorem").
+4. CONSOLIDATION: Do not list multiple examples or exercises. Use at most ONE "Examples & Exercises" node per major topic.
+5. DESCRIPTIVE NAMES: Ensure nodes have meaningful names (e.g., "Matrix Inverse Properties" instead of "Properties").
 
 {toc_hint}
-
-DOCUMENT TITLE CONTEXT:
-{title_hint}
-
-DOCUMENT CONTENT SEGMENTS:
+DOCUMENT TITLE CONTEXT: {title_hint}
+DOCUMENT CONTENT:
 {text}
 
-Return ONLY valid JSON in this format:
+Return ONLY valid JSON:
 {{
   "title": "Main Subject",
   "topics": [
-    {{
-      "name": "Major Concept Area",
-      "subtopics": ["Specific Concept A", "Specific Concept B"]
-    }}
+    {{ "name": "Major Concept", "subtopics": ["Concept Detail A", "Concept Detail B", "Practice Problems"] }}
   ]
 }}"""
 
-        try:
-            response = requests.post(self.url, json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.1, "num_predict": 1024},
-            }, timeout=90)
-            response.raise_for_status()
+        for attempt in range(2):
+            try:
+                current_prompt = prompt if attempt == 0 else f"Extract a deep technical topic tree. JSON only: {{'title': '...', 'topics': [{{'name': '...', 'subtopics': [...]}}]}}. Text: {text[:2000]}"
+                
+                response = requests.post(self.url, json={
+                    "model": self.model,
+                    "prompt": current_prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.1, "num_predict": 1024},
+                }, timeout=90)
+                response.raise_for_status()
 
-            raw = response.json()["response"].strip()
-            # find the JSON object
-            start = raw.find("{")
-            end = raw.rfind("}") + 1
-            if start != -1 and end > start:
-                raw = raw[start:end]
+                raw = response.json()["response"].strip()
+                start = raw.find("{")
+                end = raw.rfind("}") + 1
+                if start != -1 and end > start:
+                    raw = raw[start:end]
 
-            data = json.loads(raw)
-            if "topics" not in data or not isinstance(data["topics"], list) or len(data["topics"]) == 0:
-                raise ValueError("Incomplete hierarchy")
-            return data
+                data = json.loads(raw)
+                if "topics" in data and len(data["topics"]) > 0:
+                    return data
+            except Exception as e:
+                if attempt == 1:
+                    print(f"  [KG] Both extraction attempts failed: {e}")
+                continue
 
-        except Exception as e:
-            print(f"  [KG] LLM extraction failed: {e}, using fallback")
-            return self._fallback_extract(text)
+        return self._fallback_extract(text)
 
     def _hierarchy_to_entities(self, hierarchy: dict) -> list[dict]:
         """Convert hierarchy dict to flat entity list for GraphBuilder."""
         entities = []
-        title = hierarchy.get("title", "Document Analysis")
+        title = str(hierarchy.get("title", "Document Analysis"))
         
         entities.append({
             "text": title,
@@ -159,7 +157,14 @@ Return ONLY valid JSON in this format:
         })
 
         for topic in hierarchy.get("topics", []):
-            t_name = topic.get("name")
+            # Topics can sometimes be strings or dicts depending on LLM hallucination
+            if isinstance(topic, str):
+                t_name = topic
+                subtopics = []
+            else:
+                t_name = str(topic.get("name") or topic.get("topic") or "Concept")
+                subtopics = topic.get("subtopics", [])
+
             if not t_name: continue
             
             entities.append({
@@ -169,10 +174,26 @@ Return ONLY valid JSON in this format:
                 "parent": title,
             })
 
-            for sub in topic.get("subtopics", []):
+            # Post-processing: Limit "Example" or "Exercise" nodes to 1 per topic
+            practice_nodes_count = 0
+            for sub in subtopics:
                 if not sub: continue
+                
+                # Handle cases where subtopic is a dict like {'name': 'Rank'}
+                if isinstance(sub, dict):
+                    sub_text = str(sub.get("name") or sub.get("topic") or sub.get("text") or list(sub.values())[0])
+                else:
+                    sub_text = str(sub)
+
+                # Filter redundant practice nodes
+                is_practice = any(word in sub_text.lower() for word in ["example", "exercise", "practice", "problem"])
+                if is_practice:
+                    practice_nodes_count += 1
+                    if practice_nodes_count > 1:
+                        continue # Skip subsequent practice nodes
+
                 entities.append({
-                    "text": sub,
+                    "text": sub_text,
                     "type": "SUBTOPIC",
                     "frequency": 2,
                     "parent": t_name,
@@ -180,13 +201,31 @@ Return ONLY valid JSON in this format:
 
         return entities
 
-    def _fallback_extract(self, text: str) -> dict:
-        """Smarter fallback: try to find at least one subject from the first lines."""
+    def _fallback_extract(self, text: str, default_title: str = "Document Analysis") -> dict:
+        """Smarter fallback: extract keywords using simple heuristics."""
+        import re
+        from collections import Counter
+        
+        # Blacklist of words that should never be nodes (common metadata noise)
+        blacklist = {
+            "french", "azerbaijan", "azerbaijani", "university", "ufaz", "strasbourg",
+            "department", "faculty", "professor", "student", "author", "email",
+            "page", "figure", "table", "section", "chapter", "exercise", "solution"
+        }
+        
+        # Extract potential keywords (capitalized words > 4 chars)
+        words = re.findall(r'\b[A-Z][a-z]{4,}\b', text)
+        common = [w for w, c in Counter(words).most_common(12) if w.lower() not in blacklist]
+        
         lines = [l for l in text.split("\n") if len(l) > 10]
-        subject = lines[0][:30] if lines else "Document"
+        title = lines[0][:40] if lines else default_title
+        
         return {
-            "title": subject,
+            "title": title,
             "topics": [
-                {"name": "Content Overview", "subtopics": ["Check Document Body", "Technical Concept"]}
+                {
+                    "name": "Key Concepts", 
+                    "subtopics": common[:6] if common else ["Technical Content"]
+                }
             ]
         }
