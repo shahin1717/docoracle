@@ -44,6 +44,14 @@ def init_db() -> None:
             if "notes" not in cols:
                 print("📝 Migrating: Adding 'notes' column to chat_sessions...")
                 conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN notes TEXT"))
-                conn.commit()
+            
+            # Add sources to chat_messages
+            try:
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN sources JSON"))
+                print("📝 Migrating: Added 'sources' column to 'chat_messages'")
+            except Exception:
+                pass # Already exists
+                
+            conn.commit()
         except Exception as e:
             print(f"⚠️ Migration warning: {e}")

@@ -80,7 +80,8 @@ def get_session(
             {
                 "id": m.id,
                 "role": m.role,
-                "content": m.content,
+                "text": m.content, 
+                "sources": m.sources or [],
                 "created_at": m.created_at
             }
             for m in messages
@@ -251,9 +252,9 @@ async def _event_stream(
 
         yield _sse({"type": "done"})
 
-        # Save assistant message
+        # Save assistant message with sources
         assistant_content = "".join(collected_tokens)
-        _save_assistant_message(session_id, assistant_content)
+        _save_assistant_message(session_id, assistant_content, sources if sources else None)
 
     except asyncio.CancelledError:
         log.info("chat: stream interrupted by user %s", user_id)
@@ -267,10 +268,10 @@ async def _event_stream(
         yield _sse({"type": "error", "content": str(exc)})
 
 
-def _save_assistant_message(session_id: str, content: str):
+def _save_assistant_message(session_id: str, content: str, sources: list = None):
     db = SessionLocal()
     try:
-        msg = ChatMessage(session_id=session_id, role="assistant", content=content)
+        msg = ChatMessage(session_id=session_id, role="assistant", content=content, sources=sources)
         db.add(msg)
         db.commit()
     except Exception as e:

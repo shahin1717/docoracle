@@ -35,6 +35,8 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [selectedSource, setSelectedSource] = useState(null);
+  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
   const [formData, setFormData] = useState({ username: "", email: "", password: "" });
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -143,6 +145,14 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
       console.error("Failed to save notes:", err);
     } finally {
       setIsSavingNotes(false);
+    }
+  };
+
+  const handleOpenSource = (index, messageSources) => {
+    const sources = messageSources || [];
+    if (index >= 0 && index < sources.length) {
+      setSelectedSource(sources[index]);
+      setIsSourceModalOpen(true);
     }
   };
 
@@ -351,9 +361,11 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
               if (msg.id !== assistantId) return msg;
 
               if (chunk.type === "token") {
+                const newText = msg.text + (chunk.content || "");
+                console.log("AI Token:", chunk.content);
                 return {
                   ...msg,
-                  text: msg.text + (chunk.content || ""),
+                  text: newText,
                 };
               } else if (chunk.type === "sources") {
                 return {
@@ -646,8 +658,28 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                 <ReactMarkdown
                   remarkPlugins={[remarkMath]}
                   rehypePlugins={[rehypeKatex]}
+                  components={{
+                    a: ({ href, children }) => {
+                      if (href?.startsWith("#source-")) {
+                        const index = parseInt(href.replace("#source-", ""));
+                        return (
+                          <button 
+                            onClick={() => handleOpenSource(index - 1, message.sources)}
+                            className="inline-flex items-center justify-center px-1.5 py-0.5 bg-sky-500/20 hover:bg-sky-500/40 text-sky-400 rounded text-[10px] font-bold transition-colors align-top mx-0.5"
+                            title="View Source"
+                          >
+                            {children}
+                          </button>
+                        );
+                      }
+                      return <a href={href} target="_blank" rel="noreferrer" className="text-violet-400 hover:underline">{children}</a>;
+                    }
+                  }}
                 >
-                  {message.text}
+                  {(message.text || "").replace(/\[([\d,\s]+)\]/g, (match, p1) => {
+                    const nums = p1.split(",").map(n => n.trim());
+                    return nums.map(n => `[${n}](#source-${n})`).join("");
+                  })}
                 </ReactMarkdown>
                 {message.isStreaming && (
                   <span className="inline-flex items-center gap-1 ml-2">
@@ -664,9 +696,11 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                     {message.sources.map((source, i) => (
                       <div
                         key={i}
-                        className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 rounded-lg px-3 py-1.5 max-w-xs truncate"
+                        className="text-xs bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-lg px-3 py-1.5 max-w-xs truncate transition-colors cursor-pointer"
                         title={typeof source === "string" ? source : source.text?.slice(0, 100)}
+                        onClick={() => handleOpenSource(i, message.sources)}
                       >
+                        <span className="opacity-50 mr-1">[{i + 1}]</span>
                         {typeof source === "string"
                           ? source
                           : source.title || source.source_path || `Source ${i + 1}`}
@@ -804,6 +838,68 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
           </div>
         </div>
       </div>
+      {/* Source Preview Modal */}
+      {isSourceModalOpen && selectedSource && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 lg:p-10">
+          <div className="bg-[#1a1a24] border border-white/10 rounded-2xl w-full max-w-6xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-white/10 bg-violet-600/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-600/20 flex items-center justify-center text-violet-400">
+                  <Network className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">Source Verification</h3>
+                  <p className="text-xs text-white/40">Verifying AI claims against original document</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSourceModalOpen(false)}
+                className="text-white/40 hover:text-white transition p-2 hover:bg-white/5 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div>
+                <label className="text-[10px] font-bold text-sky-400 uppercase tracking-widest mb-2 block">Document Metadata</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <p className="text-[10px] text-white/30 uppercase mb-1">File Name</p>
+                    <p className="text-sm text-white/80 font-medium truncate">{selectedSource.filename || selectedSource.title || "Unknown File"}</p>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <p className="text-[10px] text-white/30 uppercase mb-1">Page Number</p>
+                    <p className="text-sm text-white/80 font-medium">{selectedSource.page_num || "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-sky-400 uppercase tracking-widest mb-2 block">Original Text Snippet</label>
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl p-6 relative group">
+                  <div className="absolute top-4 left-4 text-sky-500/10 pointer-events-none">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M14.017 21L14.017 18C14.017 16.8954 14.9124 16 16.017 16H19.017C19.5693 16 20.017 15.5523 20.017 15V9C20.017 8.44772 19.5693 8 19.017 8H16.017C14.9124 8 14.017 7.10457 14.017 6V3H20.017C21.1216 3 22.017 3.89543 22.017 5V15C22.017 18.3137 19.3307 21 16.017 21H14.017ZM2.017 21L2.017 18C2.017 16.8954 2.91243 16 4.017 16H7.017C7.56928 16 8.017 15.5523 8.017 15V9C8.017 8.44772 7.56928 8 7.017 8H4.017C2.91243 8 2.017 7.10457 2.017 6V3H8.017C9.12157 3 10.017 3.89543 10.017 5V15C10.017 18.3137 7.3307 21 4.017 21H2.017Z" /></svg>
+                  </div>
+                  <p className="text-white/90 text-base leading-relaxed italic relative z-10 whitespace-pre-wrap">
+                    {selectedSource.text || selectedSource.content || "No text available for this source."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-black/20 border-t border-white/10 flex justify-end">
+              <button 
+                onClick={() => setIsSourceModalOpen(false)}
+                className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition border border-white/10"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

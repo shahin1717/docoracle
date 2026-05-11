@@ -24,7 +24,7 @@ class LLMClient:
             "messages": messages,
             "stream": False,
             "options": {
-            "temperature": 0.7,
+            "temperature": 0.1,
             "num_predict": 4096, 
             "top_p": 0.9,
         }
@@ -47,8 +47,8 @@ class LLMClient:
             "messages": messages,
             "stream": True,
             "options": {
-            "temperature": 0.7,
-            "num_predict": 4096,  
+            "temperature": 0.1,
+            "num_predict": 4096, 
             "top_p": 0.9,
         }
         }, stream=True, timeout=1200)

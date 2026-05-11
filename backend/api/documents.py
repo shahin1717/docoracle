@@ -195,6 +195,27 @@ def trigger_kg_build(
     return {"status": "processing"}
 
 
+# ── GET /documents/{doc_id}/view ──────────────────────────────────────────────
+@router.get("/{doc_id}/view")
+def view_document(
+    doc_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from fastapi.responses import FileResponse
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+    path = Path(doc.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk.")
+    
+    return FileResponse(
+        path, 
+        media_type="application/pdf",
+        filename=doc.filename,
+        headers={"Content-Disposition": "inline"}
+    )
+
+
 # ── helper ────────────────────────────────────────────────────────────────────
 def _get_owned_doc(doc_id: str, user_id: str, db: Session) -> Document:
     """Fetch a document and verify it belongs to the requesting user."""
