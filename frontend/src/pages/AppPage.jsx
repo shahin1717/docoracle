@@ -5,7 +5,6 @@ import DocumentSidebar from "../components/DocumentSidebar";
 import ChatPanel from "../components/ChatPanel";
 import GraphViewer from "../components/GraphViewer";
 import { getDocuments, logoutUser } from "../api/client";
-import { LogOut } from "lucide-react";
 
 export default function AppPage() {
   const { logout } = useAuth();
@@ -92,14 +91,6 @@ export default function AppPage() {
         />
       )}
 
-      {/* Logout Button (floating) */}
-      <button
-        onClick={handleLogout}
-        className="fixed bottom-6 right-6 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded-full p-3 transition text-red-300"
-        title="Logout"
-      >
-        <LogOut className="w-5 h-5" />
-      </button>
     </div>
   );
 }

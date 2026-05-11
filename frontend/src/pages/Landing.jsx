@@ -86,13 +86,13 @@ export default function Landing() {
           </div>
 
           {/* Preview */}
-          <div className="bg-white/5 border border-white/10 rounded-3xl p-3 backdrop-blur-xl shadow-2xl">
-            <div className="bg-[#0f0f1a] rounded-2xl aspect-video flex items-center justify-center border border-white/10">
-              <div className="text-center">
-                <p className="text-white/40 text-lg mb-2">✨ Interface Preview</p>
-                <p className="text-white/20 text-sm">DocOracle AI Workspace</p>
-              </div>
-            </div>
+          <div className="bg-white/5 border border-white/10 rounded-3xl p-3 backdrop-blur-xl shadow-2xl transition-all duration-700 hover:shadow-violet-500/20 hover:border-violet-500/30 group relative overflow-hidden mt-8">
+            <div className="absolute inset-0 bg-gradient-to-tr from-violet-600/10 via-transparent to-fuchsia-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+            <img 
+              src="/preview.png" 
+              alt="DocOracle Interface Preview" 
+              className="rounded-2xl w-full border border-white/10 group-hover:scale-[1.01] transition-transform duration-700"
+            />
           </div>
         </section>
 
