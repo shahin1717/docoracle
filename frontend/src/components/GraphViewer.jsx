@@ -83,22 +83,29 @@ function mapTreeToD3(tree) {
 
 // Custom Node for the Tree
 const renderRectSvgNode = ({ nodeDatum, toggleNode, onNodeClick }) => {
+  // Dynamically calculate width based on text length
+  const label = nodeDatum.name;
+  const padding = 30;
+  const charWidth = 8;
+  const dynamicWidth = Math.max(140, label.length * charWidth + padding);
+  const halfWidth = dynamicWidth / 2;
+
   return (
     <g>
       {/* Background Bubble */}
       <rect
-        width={160}
+        width={dynamicWidth}
         height={36}
-        x={-80}
+        x={-halfWidth}
         y={-18}
-        rx={18} // fully rounded
-        fill="#1a1a2e"
+        rx={6} // slightly rounded rectangle
+        fill="#1e1e2e"
         stroke="#8b5cf6"
         strokeWidth={1.5}
         onClick={() => {
-          onNodeClick(nodeDatum.name);
+          onNodeClick(label);
         }}
-        className="cursor-pointer hover:fill-[#2d2d44] transition-colors"
+        className="cursor-pointer hover:fill-[#2d2d44] transition-colors shadow-lg"
       />
       {/* Node Text */}
       <text
@@ -109,33 +116,47 @@ const renderRectSvgNode = ({ nodeDatum, toggleNode, onNodeClick }) => {
         textAnchor="middle"
         fontSize="12px"
         pointerEvents="none"
-        className="font-sans"
+        className="font-sans font-medium"
       >
-        {nodeDatum.name.length > 20 ? nodeDatum.name.substring(0, 18) + '...' : nodeDatum.name}
+        {label}
       </text>
-      {/* Expansion Indicator if it has children */}
-      {nodeDatum.children && nodeDatum.children.length > 0 && (
-        <circle 
-          r={6} 
-          cx={80} 
-          cy={0} 
-          fill="#8b5cf6" 
-          className="cursor-pointer" 
-          onClick={toggleNode}
-        />
-      )}
-      {nodeDatum._children && nodeDatum._children.length > 0 && (
-        <circle 
-          r={6} 
-          cx={80} 
-          cy={0} 
-          fill="#4c1d95" 
-          stroke="#8b5cf6"
-          strokeWidth={1}
-          className="cursor-pointer" 
-          onClick={toggleNode}
-        />
-      )}
+      {/* Expansion Indicator - Moved outside the bubble */}
+      {(nodeDatum.children && nodeDatum.children.length > 0) || (nodeDatum._children && nodeDatum._children.length > 0) ? (
+        <g 
+          transform={`translate(${halfWidth + 12}, 0)`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleNode();
+          }}
+          className="cursor-pointer group"
+        >
+          {/* Invisible larger hitbox to prevent "shaking" and make clicking easier */}
+          <rect 
+            width={24} 
+            height={24} 
+            x={-12} 
+            y={-12} 
+            fill="transparent" 
+          />
+          <circle 
+            r={8} 
+            fill={nodeDatum._children ? "#8b5cf6" : "#4c1d95"} 
+            stroke="#11111b"
+            strokeWidth={1}
+            className="transition-colors group-hover:fill-[#a78bfa]"
+          />
+          <text
+            fill="white"
+            fontSize="10px"
+            textAnchor="middle"
+            y={3.5}
+            className="select-none font-bold"
+            pointerEvents="none"
+          >
+            {nodeDatum._children ? ">" : "<"}
+          </text>
+        </g>
+      ) : null}
     </g>
   );
 };
@@ -304,12 +325,12 @@ export default function GraphViewer({ documents = [], onNodeClick, onClose }) {
               orientation="horizontal"
               pathFunc="diagonal"
               translate={{ x: 100, y: 300 }} // starting offset so it's not hidden
-              nodeSize={{ x: 200, y: 60 }} // horizontal and vertical spacing
+              nodeSize={{ x: 400, y: 80 }} // Much more horizontal space
               renderCustomNodeElement={(props) => renderRectSvgNode({ ...props, onNodeClick })}
               collapsible={true}
               zoomable={true}
               scaleExtent={{ min: 0.2, max: 2 }}
-              separation={{ siblings: 1, nonSiblings: 1.5 }}
+              separation={{ siblings: 1.2, nonSiblings: 2 }}
             />
           </div>
         ) : (
