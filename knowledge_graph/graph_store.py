@@ -21,7 +21,7 @@ class GraphStore:
 
     def save(self, graph: nx.DiGraph, doc_id: str):
         """Serialize graph to JSON and save to disk."""
-        data = json_graph.node_link_data(graph)
+        data = json_graph.node_link_data(graph, edges="links")
         path = self._path(doc_id)
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -31,7 +31,7 @@ class GraphStore:
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
-        return json_graph.node_link_graph(data, directed=True)
+        return json_graph.node_link_graph(data, directed=True, edges="links")
 
     def exists(self, doc_id: str) -> bool:
         return self._path(doc_id).exists()

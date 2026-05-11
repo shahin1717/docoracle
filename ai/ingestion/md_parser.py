@@ -40,6 +40,16 @@ class MarkdownParser(BaseParser):
         # Use the first H1 as the title if present
         title = self._extract_title(raw) or path.stem
 
+        # Generate TOC from sections
+        toc = []
+        for s in sections:
+            if s["metadata"].get("heading"):
+                toc.append([
+                    s["metadata"]["heading_level"],
+                    s["metadata"]["heading"],
+                    s["page_num"]
+                ])
+
         return ParsedDocument(
             source_path=str(path),
             file_type="md" if path.suffix.lower() in {".md", ".markdown"} else "txt",
@@ -47,6 +57,7 @@ class MarkdownParser(BaseParser):
             full_text=full_text,
             pages=sections,
             metadata=metadata,
+            toc=toc
         )
 
     def _split_into_sections(self, raw: str) -> list[dict]:

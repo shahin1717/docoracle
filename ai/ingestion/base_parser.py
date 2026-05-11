@@ -15,6 +15,7 @@ class ParsedDocument:
     full_text: str            # complete plain text, all pages/slides joined
     pages: list[dict]         # list of {page_num, text, metadata}
     metadata: dict = field(default_factory=dict)  # author, word count, etc.
+    toc: list[list] = field(default_factory=list) # [[level, title, page], ...]
 
     @property
     def page_count(self) -> int:

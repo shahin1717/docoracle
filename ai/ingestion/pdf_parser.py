@@ -64,6 +64,9 @@ class PDFParser(BaseParser):
             "file_size_bytes": path.stat().st_size,
         }
 
+        # Extract Table of Contents
+        toc = doc.get_toc()
+        
         doc.close()
 
         # Use the PDF's Title metadata if present, fall back to filename
@@ -76,4 +79,5 @@ class PDFParser(BaseParser):
             full_text=full_text,
             pages=pages,
             metadata=metadata,
+            toc=toc
         )
