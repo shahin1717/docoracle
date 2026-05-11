@@ -83,8 +83,11 @@ export default function AppPage() {
           
           if (!anyKgInProgress) {
             const unbuiltDocs = documents.filter(d => d.status === "ready" && !d.kg_ready && d.kg_status === "none");
-            for (const d of unbuiltDocs) {
-              triggerKgBuild(d.id).catch(err => console.error("Auto-trigger KG failed:", err));
+            if (unbuiltDocs.length > 0) {
+              await Promise.all(unbuiltDocs.map(d => 
+                triggerKgBuild(d.id).catch(err => console.error("Auto-trigger KG failed:", err))
+              ));
+              await loadDocuments(); // Instant refresh so UI shows "Building..."
             }
           }
           setShowGraphModal(true);

@@ -241,7 +241,7 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
                             <Loader2 className="w-3 h-3 animate-spin text-violet-400" title="Processing document..." />
                           )}
                         </h3>
-                        <p className="text-xs text-white/40">{doc.pages || "?"} pages</p>
+                        <p className="text-xs text-white/40">{doc.page_count || "?"} pages</p>
                       </div>
                     </div>
 

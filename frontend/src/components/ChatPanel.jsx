@@ -259,23 +259,6 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
         <div className="flex-1">
           <h2 className="font-semibold text-lg">AI Workspace</h2>
           
-          <div className="mt-2">
-            <div className="flex flex-wrap gap-2">
-              <span className="text-xs text-white/40 py-1.5">Workspace Documents:</span>
-              {documents.length === 0 ? (
-                <span className="text-xs text-white/20 py-1.5">None</span>
-              ) : (
-                documents.map((doc) => (
-                  <span
-                    key={doc.id}
-                    className="text-xs px-2.5 py-1.5 rounded-lg bg-white/[0.03] text-white/50 border border-white/5 truncate max-w-[200px]"
-                  >
-                    {doc.name}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
         </div>
 
         <div className="flex items-center gap-3 ml-4">
