@@ -46,6 +46,7 @@ def build_knowledge_graph(document_id: str) -> None:
 
         try:
             doc.kg_ready = True
+            doc.kg_status = "ready"
             db.add(doc)
             db.commit()
             log.info(f"✅ Knowledge Graph built successfully for {document_id} ({graph.number_of_nodes()} nodes)")
@@ -57,6 +58,15 @@ def build_knowledge_graph(document_id: str) -> None:
 
     except Exception as e:
         log.exception(f"KG build failed for {document_id}")
+        if db:
+            try:
+                doc = db.query(Document).filter(Document.id == document_id).first()
+                if doc:
+                    doc.kg_status = "error"
+                    db.add(doc)
+                    db.commit()
+            except Exception:
+                pass
     finally:
         if db:
             db.close()

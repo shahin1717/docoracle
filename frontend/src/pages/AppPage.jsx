@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import DocumentSidebar from "../components/DocumentSidebar";
 import ChatPanel from "../components/ChatPanel";
 import GraphViewer from "../components/GraphViewer";
-import { getDocuments, logoutUser } from "../api/client";
+import { getDocuments, logoutUser, triggerKgBuild } from "../api/client";
 import { LogOut } from "lucide-react";
 
 export default function AppPage() {
@@ -23,7 +23,7 @@ export default function AppPage() {
 
   // Poll for document status if any are pending
   useEffect(() => {
-    const hasPendingDocs = documents.some((d) => !d.kg_ready || d.status !== "ready");
+    const hasPendingDocs = documents.some((d) => d.status !== "ready" || d.kg_status === "processing");
     if (hasPendingDocs && sessionId) {
       const interval = setInterval(() => {
         loadDocuments();
@@ -77,7 +77,18 @@ export default function AppPage() {
         }}
         pendingQuery={pendingQuery}
         clearPendingQuery={() => setPendingQuery(null)}
-        onOpenGraph={() => setShowGraphModal(true)}
+        onOpenGraph={async () => {
+          // If NO documents in this session have a KG yet, trigger all of them
+          const anyKgInProgress = documents.some(d => d.kg_ready || d.kg_status === "processing");
+          
+          if (!anyKgInProgress) {
+            const unbuiltDocs = documents.filter(d => d.status === "ready" && !d.kg_ready && d.kg_status === "none");
+            for (const d of unbuiltDocs) {
+              triggerKgBuild(d.id).catch(err => console.error("Auto-trigger KG failed:", err));
+            }
+          }
+          setShowGraphModal(true);
+        }}
       />
 
       {/* Graph Modal */}

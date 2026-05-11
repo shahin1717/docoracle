@@ -33,6 +33,7 @@ class DocumentOut(BaseModel):
     chunk_count: int
     page_count:  int
     kg_ready:    bool
+    kg_status:   str
     session_id:  str | None
 
     model_config = {"from_attributes": True}
@@ -105,7 +106,6 @@ async def upload_document(
 
     # ── kick off background pipeline ──────────────────────────────────────────
     background_tasks.add_task(run_ingestion, doc.id)
-    background_tasks.add_task(build_knowledge_graph, doc.id)
     log.info("upload: document %s queued for ingestion", doc.id)
     return DocumentOut.model_validate(doc)
 
@@ -165,6 +165,34 @@ def delete_document(
 
     db.delete(doc)
     db.commit()
+
+
+# ── POST /documents/{doc_id}/kg ───────────────────────────────────────────────
+@router.post("/{doc_id}/kg")
+def trigger_kg_build(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    doc = _get_owned_doc(doc_id, current_user.id, db)
+    
+    if doc.status != "ready":
+        raise HTTPException(
+            status_code=400, 
+            detail="Document must be ready (ingested) before building KG"
+        )
+    
+    if doc.kg_status == "processing":
+        return {"status": "already_processing"}
+
+    # Update status to processing
+    doc.kg_status = "processing"
+    db.add(doc)
+    db.commit()
+    
+    background_tasks.add_task(build_knowledge_graph, doc.id)
+    return {"status": "processing"}
 
 
 # ── helper ────────────────────────────────────────────────────────────────────

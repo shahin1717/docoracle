@@ -260,6 +260,19 @@ export async function getDocumentGraph(docId) {
   return res.json(); // { nodes: [...], links: [...] }
 }
 
+export async function triggerKgBuild(docId) {
+  const res = await fetch(`${API_URL}/documents/${docId}/kg`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to trigger KG build");
+  }
+
+  return res.json();
+}
+
 // ==================== HEALTH ====================
 export async function checkHealth() {
   const res = await fetch(`${API_URL}/health`);
