@@ -21,9 +21,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-__pycache__/
-*.pyc
-/backend/api/__pycache__/
+
 # Environment
 .env
 .venv/
@@ -31,17 +29,17 @@ venv/
 env/
 ENV/
 
-# Data, Logs & Databases
-data/graphs/
+# Databases
+*.db
+docoracle.db
+data/*.db
+data/docs.db
+app.db
+
+# Data & Storage
 data/uploads/
 data/faiss_index/
-data/*.db
-/data/docs.db
-*.db
-app.db
-docs.db
-*.pdf
-txt.txt
+data/graphs/
 knowledge_graphs/
 
 # Frontend & Node
@@ -53,5 +51,4 @@ yarn-error.log*
 .eslintcache
 frontend/dist/
 frontend/build/
-data/app.db
-data/docs.db
+.pytest_cache/
