@@ -59,7 +59,10 @@ if [ -d "frontend" ]; then
     echo "--------------------------------------"
 
     cd frontend
-    npm install
+    if [ ! -d "node_modules" ]; then
+        echo "Installing frontend dependencies (first time only)..."
+        npm install
+    fi
     npm run dev &
     FRONTEND_PID=$!
     cd ..
