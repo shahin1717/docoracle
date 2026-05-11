@@ -36,4 +36,7 @@ class UserOut(BaseModel):
 
 # ── Update preferences ────────────────────────────────────────────────────────
 class UserUpdateRequest(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=64)
+    email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     preferred_model: str | None = None   # pass None to reset to server default
