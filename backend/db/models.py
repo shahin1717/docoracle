@@ -81,6 +81,7 @@ class ChatSession(Base):
     id         = Column(String, primary_key=True, default=_uuid)
     user_id    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title      = Column(String(255), default="New Chat", nullable=False)
+    notes      = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

@@ -246,6 +246,16 @@ export async function deleteChatSession(sessionId) {
   return res.json();
 }
 
+export async function updateChatSessionNotes(sessionId, notes) {
+  const res = await fetch(`${API_URL}/chat/sessions/${sessionId}/notes`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify({ notes }),
+  });
+  if (!res.ok) throw new Error("Failed to update notes");
+  return res.json();
+}
+
 
 // ==================== KNOWLEDGE GRAPH ====================
 export async function getDocumentGraph(docId) {

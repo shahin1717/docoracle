@@ -33,3 +33,17 @@ def init_db() -> None:
     # import models here so Base knows about them before create_all
     from backend.db import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+
+    # Lightweight migration: Add 'notes' column to chat_sessions if it doesn't exist
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        try:
+            # SQLite specific check
+            res = conn.execute(text("PRAGMA table_info(chat_sessions)")).fetchall()
+            cols = [c[1] for c in res]
+            if "notes" not in cols:
+                print("📝 Migrating: Adding 'notes' column to chat_sessions...")
+                conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN notes TEXT"))
+                conn.commit()
+        except Exception as e:
+            print(f"⚠️ Migration warning: {e}")

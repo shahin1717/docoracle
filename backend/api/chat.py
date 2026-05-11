@@ -24,6 +24,10 @@ class QueryRequest(BaseModel):
     session_id: str | None = None
 
 
+class UpdateNotesRequest(BaseModel):
+    notes: str
+
+
 # ── GET /chat/sessions ────────────────────────────────────────────────────────
 @router.get("/sessions")
 def get_sessions(
@@ -71,6 +75,7 @@ def get_session(
     return {
         "id": session.id,
         "title": session.title,
+        "notes": session.notes,
         "messages": [
             {
                 "id": m.id,
@@ -81,6 +86,26 @@ def get_session(
             for m in messages
         ]
     }
+
+
+# ── PATCH /chat/sessions/{session_id}/notes ───────────────────────────────────
+@router.patch("/sessions/{session_id}/notes")
+def update_session_notes(
+    session_id: str,
+    body: UpdateNotesRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id,
+        ChatSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session.notes = body.notes
+    db.commit()
+    return {"status": "ok", "notes": session.notes}
 
 
 # ── DELETE /chat/sessions/{session_id} ────────────────────────────────────────

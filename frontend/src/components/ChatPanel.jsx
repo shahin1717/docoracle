@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key, Square } from "lucide-react";
-import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser, deleteCurrentUser, deleteAllHistory } from "../api/client";
+import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key, Square, StickyNote } from "lucide-react";
+import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser, deleteCurrentUser, deleteAllHistory, updateChatSessionNotes } from "../api/client";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -32,6 +32,9 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [formData, setFormData] = useState({ username: "", email: "", password: "" });
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -129,6 +132,20 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
     }
   };
 
+  const handleSaveNotes = async (newNotes) => {
+    setNotes(newNotes);
+    if (!sessionId) return;
+    
+    setIsSavingNotes(true);
+    try {
+      await updateChatSessionNotes(sessionId, newNotes);
+    } catch (err) {
+      console.error("Failed to save notes:", err);
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
   async function loadModels() {
     try {
       const data = await getModels();
@@ -221,6 +238,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
       setLoading(true);
       setError(null);
       const session = await getChatSession(sessionId);
+      setNotes(session.notes || "");
 
       const formattedMessages = session.messages.map((m) => ({
         id: m.id,
@@ -410,6 +428,14 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
 
         <div className="flex items-center gap-3 ml-4">
           <button 
+            onClick={() => setIsNotesOpen(true)}
+            disabled={!sessionId}
+            className={`border border-white/10 rounded-xl px-4 py-2 text-sm transition whitespace-nowrap flex items-center gap-2 ${sessionId ? 'bg-white/5 hover:bg-white/10 text-white/90' : 'opacity-30 cursor-not-allowed text-white/30'}`}
+          >
+            <StickyNote className="w-4 h-4 text-amber-400/80" />
+            Notes
+          </button>
+          <button 
             onClick={onOpenGraph}
             className="bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 rounded-xl px-4 py-2 text-sm transition whitespace-nowrap flex items-center gap-2"
           >
@@ -469,6 +495,52 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
           </div>
         </div>
       </div>
+
+      {/* Notes Modal */}
+      {isNotesOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a24] border border-white/10 rounded-2xl w-full max-w-2xl h-[600px] shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-white/10">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <StickyNote className="w-5 h-5 text-amber-400" />
+                Session Notes
+              </h3>
+              <div className="flex items-center gap-4">
+                {isSavingNotes && (
+                  <span className="text-xs text-white/40 flex items-center gap-1.5 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Autosaving...
+                  </span>
+                )}
+                <button 
+                  onClick={() => setIsNotesOpen(false)}
+                  className="text-white/40 hover:text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 p-6">
+              <textarea
+                value={notes}
+                onChange={(e) => handleSaveNotes(e.target.value)}
+                placeholder="Write down your key findings, thoughts, or reminders for this session..."
+                className="w-full h-full bg-transparent text-white/90 placeholder:text-white/20 outline-none resize-none text-base leading-relaxed"
+                autoFocus
+              />
+            </div>
+            <div className="p-4 bg-black/20 border-t border-white/10 flex justify-between items-center text-xs text-white/40">
+              <span>Your notes are automatically saved to this chat session.</span>
+              <button 
+                onClick={() => setIsNotesOpen(false)}
+                className="text-violet-400 hover:text-violet-300 font-medium transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Settings Modal */}
       {isSettingsOpen && (
