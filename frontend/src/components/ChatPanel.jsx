@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key } from "lucide-react";
+import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key, Square } from "lucide-react";
 import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser } from "../api/client";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 export default function ChatPanel({ documents = [], sessionId, onSessionChange, pendingQuery, clearPendingQuery, onOpenGraph }) {
   const [messages, setMessages] = useState([
@@ -22,6 +26,7 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
   const [modelData, setModelData] = useState({ models: [], current: "", catalog: [] });
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState(null);
+  const abortControllerRef = useRef(null);
 
   const [user, setUser] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -192,6 +197,30 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
     }
   }
 
+  // Cleanup/Stop generation when switching sessions or unmounting
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        console.log("Stopping generation due to session change/unmount");
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [sessionId]);
+
+  function handleStopGeneration() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setLoading(false);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.isStreaming ? { ...msg, isStreaming: false, text: msg.text + " [Interrupted]" } : msg
+        )
+      );
+    }
+  }
+
   async function handleSendMessage(overrideText = null) {
     const textToSend = typeof overrideText === "string" ? overrideText : input;
     if (!textToSend.trim() || loading) return;
@@ -229,6 +258,10 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
     }
     setLoading(true);
     setError(null);
+
+    // Create new abort controller
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       await streamQuery(
@@ -268,7 +301,11 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
           );
         },
         (err) => {
-          console.error("Stream error:", err);
+          if (err.name === "AbortError") {
+            console.log("Generation aborted by user");
+            return;
+          }
+          console.error("Stream error:", err),
           setError(err.message || "Something went wrong while streaming response.");
 
           setMessages((prev) =>
@@ -278,7 +315,8 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                 : msg
             )
           );
-        }
+        },
+        controller.signal
       );
     } catch (err) {
       console.error("Query error:", err);
@@ -315,23 +353,6 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
         <div className="flex-1">
           <h2 className="font-semibold text-lg">AI Workspace</h2>
           
-          <div className="mt-2">
-            <div className="flex flex-wrap gap-2">
-              <span className="text-xs text-white/40 py-1.5">Workspace Documents:</span>
-              {documents.length === 0 ? (
-                <span className="text-xs text-white/20 py-1.5">None</span>
-              ) : (
-                documents.map((doc) => (
-                  <span
-                    key={doc.id}
-                    className="text-xs px-2.5 py-1.5 rounded-lg bg-white/[0.03] text-white/50 border border-white/5 truncate max-w-[200px]"
-                  >
-                    {doc.name}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
         </div>
 
         <div className="flex items-center gap-3 ml-4">
@@ -480,14 +501,19 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                   : "bg-white/[0.04] border-white/10"
               }`}
             >
-              <p className="text-sm leading-relaxed text-white/90 whitespace-pre-wrap">
-                {message.text}
+              <div className="text-sm leading-relaxed text-white/90 prose prose-invert max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                >
+                  {message.text}
+                </ReactMarkdown>
                 {message.isStreaming && (
                   <span className="inline-flex items-center gap-1 ml-2">
                     <Loader2 className="w-3 h-3 animate-spin" />
                   </span>
                 )}
-              </p>
+              </div>
 
               {/* Sources */}
               {message.sources && message.sources.length > 0 && (
@@ -545,6 +571,16 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
             </div>
 
             <div className="flex items-center gap-3">
+              {loading && (
+                <button
+                  onClick={handleStopGeneration}
+                  className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-xl px-4 py-2.5 text-sm transition flex items-center gap-2"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop
+                </button>
+              )}
+
               <div className="relative">
                 <button
                   onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}

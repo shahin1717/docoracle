@@ -43,7 +43,7 @@ class Embedder:
         response = requests.post(self.url, json={
             "model": self.model,
             "prompt": text,
-        }, timeout=30)
+        }, timeout=90)
         response.raise_for_status()
         vector = response.json()["embedding"]
         return np.array(vector, dtype=np.float32)

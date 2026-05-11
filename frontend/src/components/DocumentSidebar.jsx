@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { getDocuments, uploadDocument, deleteDocument, getChatSessions, deleteChatSession, createChatSession } from "../api/client";
-import { FileText, Trash2, Upload, MessageSquare, Plus, Loader2 } from "lucide-react";
+import { FileText, Trash2, Upload, MessageSquare, Plus, Loader2, GitBranch } from "lucide-react";
+import { getDocuments, uploadDocument, deleteDocument, getChatSessions, deleteChatSession, createChatSession, triggerKgBuild } from "../api/client";
 
 export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTrigger, documents = [], onDocumentsChange }) {
   const [sessions, setSessions] = useState([]);
@@ -76,6 +76,16 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
     } catch (err) {
       setError(err.message);
       console.error("Delete failed:", err);
+    }
+  }
+
+  async function handleBuildKg(docId, e) {
+    e.stopPropagation();
+    try {
+      await triggerKgBuild(docId);
+      if (onDocumentsChange) onDocumentsChange();
+    } catch (err) {
+      console.error("Failed to trigger KG build:", err);
     }
   }
 
@@ -227,11 +237,11 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
                       <div className="flex-1">
                         <h3 className="font-medium text-sm mb-1 break-all line-clamp-2 group-hover:text-violet-300 transition flex items-center gap-2">
                           {doc.name || doc.filename}
-                          {(!doc.kg_ready || doc.status !== "ready") && (
+                          {doc.status !== "ready" && (
                             <Loader2 className="w-3 h-3 animate-spin text-violet-400" title="Processing document..." />
                           )}
                         </h3>
-                        <p className="text-xs text-white/40">{doc.pages || "?"} pages</p>
+                        <p className="text-xs text-white/40">{doc.page_count || "?"} pages</p>
                       </div>
                     </div>
 
@@ -243,8 +253,37 @@ export default function DocumentSidebar({ sessionId, onSessionSelect, refreshTri
                     </button>
                   </div>
 
-                  <div className="mt-3 text-xs text-white/30">
-                    {formatDate(doc.uploaded_at || new Date().toISOString())}
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="text-xs text-white/30">
+                      {formatDate(doc.uploaded_at || new Date().toISOString())}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {doc.status === "ready" && !doc.kg_ready && doc.kg_status !== "processing" && (
+                        <button
+                          onClick={(e) => handleBuildKg(doc.id, e)}
+                          className="flex items-center gap-1 px-2 py-1 bg-violet-600/20 hover:bg-violet-600/40 text-violet-300 rounded-md text-[10px] font-medium transition"
+                          title="Generate Knowledge Graph"
+                        >
+                          <GitBranch className="w-3 h-3" />
+                          Build KG
+                        </button>
+                      )}
+
+                      {doc.kg_status === "processing" && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/10 text-amber-300 rounded-md text-[10px] font-medium animate-pulse border border-amber-500/20">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Building...
+                        </div>
+                      )}
+
+                      {doc.kg_ready && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded-md text-[10px] font-medium border border-emerald-500/20">
+                          <GitBranch className="w-3 h-3" />
+                          KG Ready
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))

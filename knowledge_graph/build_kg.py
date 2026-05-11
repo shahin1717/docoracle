@@ -23,7 +23,7 @@ def build_kg(pdf_path: str):
     chunk_dicts = [{"chunk_id": c.chunk_id, "text": c.text} for c in chunks]
 
     print("\n[2] Extracting entities...")
-    entities = EntityExtractor().extract_from_chunks(chunk_dicts)
+    entities = EntityExtractor().extract_from_chunks(chunk_dicts, toc=doc.toc)
     print(f"    {len(entities)} entities")
 
     print("\n[3] Extracting relations...")

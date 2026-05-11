@@ -1,4 +1,4 @@
-# backend/api/chat.py
+import asyncio
 import json
 import logging
 from typing import AsyncGenerator
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from backend.auth.middleware import get_current_user
 from backend.db.database import get_db, SessionLocal
 from backend.db.models import Document, User, ChatSession, ChatMessage
-from backend.services.query_service import get_source_chunks, stream_answer
+from backend.services.query_service import get_source_chunks, stream_answer, generate_chat_title
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = logging.getLogger(__name__)
@@ -128,7 +128,7 @@ async def chat_query(
     # Handle chat session first
     session_id = body.session_id
     if not session_id:
-        title = body.query[:50] + ("..." if len(body.query) > 50 else "")
+        title = generate_chat_title(body.query, model=current_user.preferred_model)
         new_session = ChatSession(user_id=current_user.id, title=title)
         db.add(new_session)
         db.commit()
@@ -141,9 +141,13 @@ async def chat_query(
         ).first()
         if not existing:
             raise HTTPException(status_code=404, detail="Chat session not found.")
+        
         existing.updated_at = datetime.utcnow()
-        if existing.title == "New Chat":
-            existing.title = body.query[:50] + ("..." if len(body.query) > 50 else "")
+        # If it's a default title, try to generate a better one using document context
+        if existing.title == "New Chat" or existing.title.startswith("Chat: "):
+            session_docs = db.query(Document).filter(Document.session_id == session_id).all()
+            doc_titles = [d.filename for d in session_docs]
+            existing.title = generate_chat_title(body.query, doc_titles=doc_titles, model=current_user.preferred_model)
         db.commit()
 
     # Automatically fetch doc_ids for this session
@@ -226,6 +230,13 @@ async def _event_stream(
         assistant_content = "".join(collected_tokens)
         _save_assistant_message(session_id, assistant_content)
 
+    except asyncio.CancelledError:
+        log.info("chat: stream interrupted by user %s", user_id)
+        # Save partial response if we have tokens
+        if collected_tokens:
+            assistant_content = "".join(collected_tokens) + " [Interrupted]"
+            _save_assistant_message(session_id, assistant_content)
+        raise
     except Exception as exc:
         log.exception("chat: stream error for user %s", user_id)
         yield _sse({"type": "error", "content": str(exc)})

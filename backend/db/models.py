@@ -61,6 +61,7 @@ class Document(Base):
     chunk_count  = Column(Integer, default=0, nullable=False)
     page_count   = Column(Integer, default=0, nullable=False)
     kg_ready     = Column(Boolean, default=False, nullable=False)
+    kg_status    = Column(String(32), default="none", nullable=False) # none, processing, ready, error
 
     created_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at   = Column(DateTime, default=datetime.utcnow,

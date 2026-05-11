@@ -145,7 +145,7 @@ export async function queryDocuments(query, docIds = null) {
 }
 
 // Stream helper for chat responses (Server-Sent Events)
-export async function streamQuery(query, sessionId = null, onChunk, onError) {
+export async function streamQuery(query, sessionId = null, onChunk, onError, signal = null) {
   try {
     const payload = {
       query,
@@ -162,6 +162,7 @@ export async function streamQuery(query, sessionId = null, onChunk, onError) {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
+      signal: signal,
     });
 
     if (!res.ok) {
@@ -258,6 +259,19 @@ export async function getDocumentGraph(docId) {
   }
 
   return res.json(); // { nodes: [...], links: [...] }
+}
+
+export async function triggerKgBuild(docId) {
+  const res = await fetch(`${API_URL}/documents/${docId}/kg`, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to trigger KG build");
+  }
+
+  return res.json();
 }
 
 // ==================== HEALTH ====================

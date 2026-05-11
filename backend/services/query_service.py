@@ -120,3 +120,38 @@ def get_source_chunks(chunk_ids: list[str]) -> list[dict]:
     from ai.vectorstore.metadata_store import MetadataStore
     meta_store = MetadataStore(db_path=settings.docs_db_path)
     return [meta_store.get_chunk(cid) for cid in chunk_ids if cid]
+
+
+def generate_chat_title(query: str, doc_titles: list[str] = None, model: str | None = None) -> str:
+    """Generate a concise title for a chat session based on the first query and document context."""
+    llm_model = model or settings.llm_model
+    try:
+        from ai.generation.llm_client import LLMClient
+        llm = LLMClient(
+            model=llm_model,
+            ollama_url=f"{settings.ollama_base_url}/api/chat",
+        )
+        
+        doc_context = ""
+        if doc_titles:
+            doc_context = f"The documents being discussed are: {', '.join(doc_titles)}.\n"
+
+        prompt = (
+            "You are a professional editor. Summarize the following user query into a "
+            "concise chat title of max 3-4 words. "
+            f"{doc_context}"
+            "Priority: If the query is generic like 'what is this about?', use the document names to create a title. "
+            "DO NOT use words like 'PDF', 'About', 'Question', 'Query', or 'What'.\n"
+            f"User Query: '{query}'\n"
+            "Return ONLY the title text."
+        )
+        messages = [{"role": "user", "content": prompt}]
+        response = llm.generate(messages)
+        title = response.strip().strip('"').strip("'").strip(".")
+        
+        if not title or len(title) > 60:
+            return query[:40] + ("..." if len(query) > 40 else "")
+        return title
+    except Exception as e:
+        log.warning(f"Failed to generate chat title: {e}")
+        return query[:40] + ("..." if len(query) > 40 else "")
