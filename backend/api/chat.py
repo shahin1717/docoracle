@@ -1,4 +1,4 @@
-# backend/api/chat.py
+import asyncio
 import json
 import logging
 from typing import AsyncGenerator
@@ -230,6 +230,13 @@ async def _event_stream(
         assistant_content = "".join(collected_tokens)
         _save_assistant_message(session_id, assistant_content)
 
+    except asyncio.CancelledError:
+        log.info("chat: stream interrupted by user %s", user_id)
+        # Save partial response if we have tokens
+        if collected_tokens:
+            assistant_content = "".join(collected_tokens) + " [Interrupted]"
+            _save_assistant_message(session_id, assistant_content)
+        raise
     except Exception as exc:
         log.exception("chat: stream error for user %s", user_id)
         yield _sse({"type": "error", "content": str(exc)})

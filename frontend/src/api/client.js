@@ -145,7 +145,7 @@ export async function queryDocuments(query, docIds = null) {
 }
 
 // Stream helper for chat responses (Server-Sent Events)
-export async function streamQuery(query, sessionId = null, onChunk, onError) {
+export async function streamQuery(query, sessionId = null, onChunk, onError, signal = null) {
   try {
     const payload = {
       query,
@@ -162,6 +162,7 @@ export async function streamQuery(query, sessionId = null, onChunk, onError) {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
+      signal: signal,
     });
 
     if (!res.ok) {

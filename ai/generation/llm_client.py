@@ -54,15 +54,18 @@ class LLMClient:
         }, stream=True, timeout=1200)
         response.raise_for_status()
 
-        for line in response.iter_lines():
-            if not line:
-                continue
-            data = json.loads(line)
-            token = data.get("message", {}).get("content", "")
-            if token:
-                yield token
-            if data.get("done"):
-                break
+        try:
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                token = data.get("message", {}).get("content", "")
+                if token:
+                    yield token
+                if data.get("done"):
+                    break
+        finally:
+            response.close()
 
     def is_available(self) -> bool:
         try:
