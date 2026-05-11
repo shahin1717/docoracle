@@ -52,3 +52,4 @@ yarn-error.log*
 frontend/dist/
 frontend/build/
 .pytest_cache/
+scratch/
