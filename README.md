@@ -64,6 +64,13 @@ Launch the backend and frontend services simultaneously using the provided start
 ```bash
 bash run.sh
 ```
+#### If fails to run front:
+```bash
+cd frontend
+npm install 
+cd ..
+bash run.sh
+```
 Once initialized, the services will be available at:
 - Frontend Interface: http://localhost:5173
 - Backend API: http://localhost:8000
