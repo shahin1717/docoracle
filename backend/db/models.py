@@ -101,6 +101,7 @@ class ChatMessage(Base):
     session_id = Column(String, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
     role       = Column(String(32), nullable=False)  # "user" or "assistant"
     content    = Column(Text, nullable=False)
+    sources    = Column(JSON, nullable=True) # List of source metadata
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     session = relationship("ChatSession", back_populates="messages")

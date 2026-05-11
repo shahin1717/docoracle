@@ -12,35 +12,37 @@ def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore
     for i, chunk in enumerate(chunks, 1):
         source = chunk.get("title") or chunk["source_path"]
         page = f", page {chunk['page_num']}" if chunk["page_num"] else ""
-        context_parts.append(f"[{i}] (source: {source}{page})\n{chunk['text']}")
+        context_parts.append(f"--- SOURCE [{i}] ---\nDOC: {source}{page}\nTEXT: {chunk['text']}\n")
 
     context = "\n\n".join(context_parts)
 
     system_prompt = (
-        "You are a helpful expert assistant. Use the provided context as your primary source.\n\n"
-        "STYLE & STRUCTURE RULES:\n"
-        "1. Use Markdown headers (e.g., ### Step 1) for a clear structure.\n"
-        "2. Use emojis (👉, ✅, 💡) to highlight key steps.\n"
-        "3. Use separators (---) between major sections.\n\n"
-        "STRICT MATHEMATICAL RULES:\n"
-        "1. ALWAYS use LaTeX. NEVER use plain text math.\n"
-        "2. DELIMITERS: Use $...$ for inline and $$...$$ for blocks.\n"
-        "3. MATRICES: Use \\begin{pmatrix} ... \\end{pmatrix}.\n"
-        "4. ROW SEPARATION: You MUST use exactly two backslashes (\\\\) to end a row. Repeat: Use \\\\ between every row. A single \\ will fail.\n"
-        "5. BLOCK MATH: Put all matrices on a new line with $$ above and below.\n\n"
-        "TEMPLATE EXAMPLE:\n"
-        "### Step 1 — The Matrix\n"
-        "👉 The matrix $A$ is:\n\n"
-        "$$A = \\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \\end{pmatrix}$$\n\n"
-        "\n\n"
-        "Add little space between lines to make it readable."
-        "Your goal is a beautiful, professional study guide. Cite [1], [2] etc."
+        "You are CitationBot. YOUR ONLY JOB is to answer questions using the provided context and citing it.\n\n"
+        "RULES OF ENGAGEMENT:\n"
+        "1. EVERY SINGLE SENTENCE that contains a fact MUST end with a source tag like [1].\n"
+        "2. If you find a fact in Source 1 and Source 3, you MUST write: 'The fact is true [1, 3].'\n"
+        "3. NEVER use your internal knowledge. If the context doesn't have the info, say 'I cannot find this in the documents [n]' (cite the closest source anyway).\n"
+        "4. DO NOT write a bibliography at the end. Only use [n] tags.\n\n"
+        "PERFECT EXAMPLE:\n"
+        "The quicksort algorithm is efficient [1]. It uses a pivot to partition data [2, 4].\n\n"
+        "MATHEMATICAL RULES:\n"
+        "1. Use $...$ for inline and $$...$$ for blocks.\n"
+        "2. Use \\\\ for row ends in matrices.\n\n"
+        "IF YOU DO NOT USE [n] TAGS, YOU FAIL. BE AGGRESSIVE WITH CITATIONS."
     )
 
-    user_message = f"Context:\n{context}\n\nQuestion: {query}"
-
+    full_system_prompt = (
+        f"{system_prompt}\n\n"
+        "--- RESEARCH CONTEXT START ---\n"
+        f"{context}\n"
+        "--- RESEARCH CONTEXT END ---\n\n"
+        "CRITICAL RULE: USE ONLY THE CONTEXT ABOVE. DO NOT USE YOUR INTERNAL KNOWLEDGE. "
+        "IF YOU USE EXTERNAL INFORMATION, YOU ARE FAILING. "
+        "EVERY FACT MUST BE CITED WITH [n]."
+    )
+    
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": full_system_prompt},
     ]
 
     if chat_history:
@@ -48,6 +50,12 @@ def build_prompt(query: str, chunk_ids: list[str], metadata_store: MetadataStore
         for msg in chat_history[-6:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
     
-    messages.append({"role": "user", "content": user_message})
+    user_query_with_rules = (
+        "You are in STRIKT CITATION MODE. "
+        "Answer the following question using ONLY the provided sources. "
+        "Use [n] for every claim.\n\n"
+        f"QUESTION: {query}"
+    )
+    messages.append({"role": "user", "content": user_query_with_rules})
 
     return messages

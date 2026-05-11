@@ -64,7 +64,7 @@ def run_ingestion(document_id: str) -> None:
             "chunk_index": e.chunk.chunk_index,
             "text":        e.chunk.text,
             "token_count": e.chunk.token_count,
-            "metadata":    e.chunk.metadata,
+            "metadata":    {**e.chunk.metadata, "doc_id": doc.id},
         } for e in embedded])
 
         # Update document status

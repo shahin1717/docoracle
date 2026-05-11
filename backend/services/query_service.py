@@ -109,6 +109,11 @@ def stream_answer(
             model=llm_model,
             ollama_url=f"{settings.ollama_base_url}/api/chat",
         )
+        
+        # FIRST, yield the chunk IDs so the API layer knows which sources we used
+        yield {"chunk_ids": chunk_ids}
+        
+        # THEN, start the text stream
         yield from llm.stream(messages)
 
     except Exception as exc:
