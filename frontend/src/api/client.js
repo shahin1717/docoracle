@@ -343,3 +343,27 @@ export async function pullModelStream(modelName, onChunk, onError) {
     onError?.(error);
   }
 }
+
+// ==================== USER PROFILE ====================
+export async function getCurrentUser() {
+  const res = await fetch(`${API_URL}/auth/me`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) throw new Error("Failed to fetch current user");
+  return res.json();
+}
+
+export async function updateCurrentUser(data) {
+  // Mocking the update on the frontend only as requested by the user
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        id: "mock-id",
+        username: data.username || "UpdatedUser",
+        email: data.email || "updated@example.com",
+        is_active: true,
+        created_at: new Date().toISOString(),
+      });
+    }, 600);
+  });
+}

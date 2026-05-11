@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2 } from "lucide-react";
-import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession } from "../api/client";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key } from "lucide-react";
+import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser } from "../api/client";
 
 export default function ChatPanel({ documents = [], sessionId, onSessionChange, pendingQuery, clearPendingQuery, onOpenGraph }) {
   const [messages, setMessages] = useState([
@@ -21,9 +23,53 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [pullProgress, setPullProgress] = useState(null);
 
+  const [user, setUser] = useState(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState({ username: "", email: "", password: "" });
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
   useEffect(() => {
     loadModels();
+    loadUser();
   }, []);
+
+  async function loadUser() {
+    try {
+      const data = await getCurrentUser();
+      setUser(data);
+      setFormData({ username: data.username || "", email: data.email || "", password: "" });
+    } catch (err) {
+      console.error("Failed to load user:", err);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      logout();
+      navigate("/login");
+    }
+  }
+
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    try {
+      const updatedUser = await updateCurrentUser(formData);
+      setUser(updatedUser);
+      setIsSettingsOpen(false);
+      setFormData(prev => ({ ...prev, password: "" }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   async function loadModels() {
     try {
@@ -252,6 +298,16 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
     }
   };
 
+  const handleExportChat = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(messages, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `chat_export_${sessionId || 'new'}_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
   return (
     <main className="flex-1 flex flex-col bg-[#0b0b12]">
       {/* Top Bar */}
@@ -286,14 +342,129 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
             <Network className="w-4 h-4" />
             Knowledge Map
           </button>
-          <button className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm transition whitespace-nowrap">
+          <button 
+            onClick={handleExportChat}
+            className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2 text-sm transition whitespace-nowrap flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
             Export Chat
           </button>
-          <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-medium flex-shrink-0">
-            A
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsProfileOpen(!isProfileOpen)}
+              className="w-10 h-10 rounded-full bg-violet-600 hover:bg-violet-700 flex items-center justify-center font-medium flex-shrink-0 transition hover:scale-105"
+            >
+              {user?.username?.[0]?.toUpperCase() || "U"}
+            </button>
+
+            {isProfileOpen && (
+              <div className="absolute right-0 mt-2 w-48 bg-[#1a1a24] border border-white/10 rounded-xl shadow-xl overflow-hidden z-50">
+                <div className="p-3 border-b border-white/10">
+                  <p className="text-sm font-medium text-white truncate">{user?.username || "User"}</p>
+                  <p className="text-xs text-white/50 truncate">{user?.email || "user@example.com"}</p>
+                </div>
+                <div className="p-1">
+                  <button
+                    onClick={() => {
+                      setIsProfileOpen(false);
+                      setIsSettingsOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5 hover:text-white rounded-lg flex items-center gap-2 transition"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Settings
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-2 transition mt-1"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1a1a24] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-white/10">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Settings className="w-5 h-5 text-violet-400" />
+                Profile Settings
+              </h3>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-white/40 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-white/60 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                  <User className="w-3.5 h-3.5" />
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({...formData, username: e.target.value})}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:border-violet-500/50 text-white transition"
+                  placeholder="Username"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-white/60 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5" />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:border-violet-500/50 text-white transition"
+                  placeholder="Email"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-white/60 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                  <Key className="w-3.5 h-3.5" />
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({...formData, password: e.target.value})}
+                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 outline-none focus:border-violet-500/50 text-white transition placeholder:text-white/20"
+                  placeholder="Leave blank to keep current"
+                />
+              </div>
+            </div>
+            <div className="p-5 border-t border-white/10 flex justify-end gap-3 bg-black/20">
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveSettings}
+                disabled={isSaving}
+                className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-xl text-sm font-medium transition flex items-center gap-2"
+              >
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
