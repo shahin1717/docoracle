@@ -114,47 +114,125 @@ def delete_model_endpoint(
         )
 
 
+import bcrypt
+
+from backend.db.models import User, Document, ChatSession
+import os
+
 # ── PATCH /users/me ───────────────────────────────────────────────────────────
 @router.patch("/me", response_model=UserOut)
-def update_preferences(
+def update_user_profile(
     body: UserUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserOut:
     """
-    Save the user's preferred model.
-    Pass preferred_model: null to reset to server default.
+    Update user profile details: username, email, password, or preferred model.
     """
-    if body.preferred_model is not None:
-        # validate the model actually exists in Ollama
-        try:
-            resp = requests.get(
-                f"{settings.ollama_base_url}/api/tags",
-                timeout=3,
-            )
-            available = [m["name"] for m in resp.json().get("models", [])]
-            if body.preferred_model not in available:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Model '{body.preferred_model}' is not available in Ollama. "
-                           f"Run: ollama pull {body.preferred_model}",
-                )
-        except HTTPException:
-            raise
-        except Exception:
+    # 1. Handle Username Update
+    if body.username and body.username != current_user.username:
+        # Check if username is already taken
+        existing = db.query(User).filter(User.username == body.username).first()
+        if existing:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Cannot reach Ollama to validate model.",
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken.",
             )
+        current_user.username = body.username
 
-    current_user.preferred_model = body.preferred_model
+    # 2. Handle Email Update
+    if body.email and body.email != current_user.email:
+        # Check if email is already registered
+        existing = db.query(User).filter(User.email == body.email).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already registered.",
+            )
+        current_user.email = body.email
+
+    # 3. Handle Password Update
+    if body.password:
+        hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        current_user.password_hash = hashed
+
+    # 4. Handle Preferred Model Update
+    if body.preferred_model is not None:
+        # Pass None to reset to server default
+        if body.preferred_model != current_user.preferred_model:
+            # validate the model actually exists in Ollama
+            try:
+                resp = requests.get(
+                    f"{settings.ollama_base_url}/api/tags",
+                    timeout=3,
+                )
+                available = [m["name"] for m in resp.json().get("models", [])]
+                if body.preferred_model not in available:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Model '{body.preferred_model}' is not available in Ollama.",
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Cannot reach Ollama to validate model.",
+                )
+        current_user.preferred_model = body.preferred_model
+
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
 
-    log.info(
-        "users: %s set preferred_model → %s",
-        current_user.username,
-        current_user.preferred_model or "default",
-    )
+    log.info("users: profile updated for %s", current_user.username)
     return UserOut.model_validate(current_user)
+
+
+# ── DELETE /users/me ──────────────────────────────────────────────────────────
+@router.delete("/me")
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete the current user's account and all their data.
+    """
+    # Physically delete document files
+    for doc in current_user.documents:
+        if os.path.exists(doc.file_path):
+            try:
+                os.remove(doc.file_path)
+            except Exception as e:
+                log.error("Failed to delete file %s: %s", doc.file_path, e)
+
+    db.delete(current_user)
+    db.commit()
+    log.warning("users: account deleted for %s", current_user.username)
+    return {"status": "ok", "message": "Account deleted successfully"}
+
+
+# ── DELETE /users/history ─────────────────────────────────────────────────────
+@router.delete("/history")
+def clear_user_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Delete all chat sessions and documents for the current user.
+    """
+    # Physically delete document files
+    for doc in current_user.documents:
+        if os.path.exists(doc.file_path):
+            try:
+                os.remove(doc.file_path)
+            except Exception as e:
+                log.error("Failed to delete file %s: %s", doc.file_path, e)
+
+    # Delete records
+    db.query(Document).filter(Document.user_id == current_user.id).delete()
+    db.query(ChatSession).filter(ChatSession.user_id == current_user.id).delete()
+    db.commit()
+
+    log.info("users: history cleared for %s", current_user.username)
+    return {"status": "ok", "message": "History cleared successfully"}

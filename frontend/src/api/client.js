@@ -368,16 +368,40 @@ export async function getCurrentUser() {
 }
 
 export async function updateCurrentUser(data) {
-  // Mocking the update on the frontend only as requested by the user
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        id: "mock-id",
-        username: data.username || "UpdatedUser",
-        email: data.email || "updated@example.com",
-        is_active: true,
-        created_at: new Date().toISOString(),
-      });
-    }, 600);
+  const res = await fetch(`${API_URL}/users/me`, {
+    method: "PATCH",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
   });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Update failed");
+  }
+
+  return res.json();
+}
+
+export async function deleteCurrentUser() {
+  const res = await fetch(`${API_URL}/users/me`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Account deletion failed");
+  }
+  return res.json();
+}
+
+export async function deleteAllHistory() {
+  const res = await fetch(`${API_URL}/users/history`, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to clear history");
+  }
+  return res.json();
 }

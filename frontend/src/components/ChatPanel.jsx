@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Send, AlertCircle, Loader2, Network, ChevronDown, Download, Check, Trash2, LogOut, Settings, User, X, Save, Mail, Key, Square } from "lucide-react";
-import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser } from "../api/client";
+import { getModels, setPreferredModel, pullModelStream, deleteModel, streamQuery, getChatSession, getCurrentUser, logoutUser, updateCurrentUser, deleteCurrentUser, deleteAllHistory } from "../api/client";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -64,15 +64,68 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
+    setError(null);
     try {
-      const updatedUser = await updateCurrentUser(formData);
+      // Filter out empty password so Pydantic validation doesn't fail
+      const updateData = { ...formData };
+      if (!updateData.password) {
+        delete updateData.password;
+      }
+      
+      const updatedUser = await updateCurrentUser(updateData);
       setUser(updatedUser);
       setIsSettingsOpen(false);
       setFormData(prev => ({ ...prev, password: "" }));
     } catch (err) {
       console.error(err);
+      setError(err.message || "Failed to update profile.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (!window.confirm("CRITICAL: This will permanently delete your account and ALL your data. This cannot be undone. Are you absolutely sure?")) {
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      await deleteCurrentUser();
+      logout();
+      navigate("/login");
+    } catch (err) {
+      setError(err.message || "Failed to delete account.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!window.confirm("Delete all chats and uploaded documents? This will reset your workspace.")) {
+      return;
+    }
+    
+    try {
+      await deleteAllHistory();
+      // Reload the session to show empty state
+      if (sessionId) {
+        onSessionChange(null);
+      } else {
+        setMessages([
+          {
+            id: "welcome",
+            role: "assistant",
+            text: "History cleared. Welcome to DocOracle. Upload documents to this chat to begin.",
+            sources: [],
+            isStreaming: false,
+          },
+        ]);
+      }
+      window.location.reload(); // Hard refresh to clear all states properly
+    } catch (err) {
+      console.error(err);
+      setError("Failed to clear history.");
     }
   };
 
@@ -397,6 +450,13 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                     Settings
                   </button>
                   <button
+                    onClick={handleClearHistory}
+                    className="w-full text-left px-3 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white rounded-lg flex items-center gap-2 transition mt-1"
+                  >
+                    <Trash2 className="w-4 h-4 opacity-50" />
+                    Clear History
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-2 transition mt-1"
                   >
@@ -467,21 +527,30 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
                 />
               </div>
             </div>
-            <div className="p-5 border-t border-white/10 flex justify-end gap-3 bg-black/20">
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSaveSettings}
+            <div className="p-5 border-t border-white/10 flex justify-between items-center bg-black/20">
+              <button
+                onClick={handleDeleteProfile}
                 disabled={isSaving}
-                className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-xl text-sm font-medium transition flex items-center gap-2"
+                className="text-xs font-medium text-red-500/60 hover:text-red-400 transition underline underline-offset-4"
               >
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Changes
+                Delete Profile
               </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveSettings}
+                  disabled={isSaving}
+                  className="px-5 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-xl text-sm font-medium transition flex items-center gap-2"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>

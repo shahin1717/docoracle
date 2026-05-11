@@ -47,7 +47,7 @@ echo ""
 echo "🚀 Starting backend"
 echo "--------------------------------------"
 
-uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
+uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload &
 BACKEND_PID=$!
 
 # -------------------------------
