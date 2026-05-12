@@ -253,8 +253,8 @@ export default function ChatPanel({ documents = [], sessionId, onSessionChange, 
       const formattedMessages = session.messages.map((m) => ({
         id: m.id,
         role: m.role,
-        text: m.content,
-        sources: [], // we don't persist sources in DB yet
+        text: m.text || "",
+        sources: m.sources || [],
         isStreaming: false,
       }));
       if (formattedMessages.length > 0) {
